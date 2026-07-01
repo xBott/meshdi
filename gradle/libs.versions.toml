@@ -1,0 +1,27 @@
+[versions]
+junit = "5.10.0"
+mockito = "5.11.0"
+assertj = "4.0.0-M1"
+lombok = "1.18.38"
+guava = "33.5.0-jre"
+kern = "0.0.14-SNAPSHOT"
+
+
+[libraries]
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
+
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
+
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+
+kern-commons = { module = "me.bottdev:kern-commons", version.ref = "kern" }
+kern-struct = { module = "me.bottdev:kern-struct", version.ref = "kern" }
+
+[bundles]
+kern = [ "kern-commons", "kern-struct" ]
