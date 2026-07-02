@@ -21,4 +21,8 @@ subprojects {
 
     apply(plugin = "java")
 
+    tasks.test {
+        useJUnitPlatform()
+    }
+
 }
