@@ -1,14 +1,14 @@
 package me.bottdev.meshdi.core.bindings;
 
-import io.gitlab.modernium.api.commons.dependency.DependOrder;
-import io.gitlab.modernium.api.commons.dependency.DependRequirement;
-import io.gitlab.modernium.api.commons.dependency.DependencyRequest;
-import io.gitlab.modernium.api.commons.key.TypedKey;
-import io.gitlab.modernium.api.di.*;
-import io.gitlab.modernium.api.di.exceptions.BeanCreationException;
-import io.gitlab.modernium.api.di.exceptions.BindingBuildException;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import me.bottdev.kern.commons.key.TypedKey;
+import me.bottdev.kern.dependency.DependOrder;
+import me.bottdev.kern.dependency.DependencyLink;
+import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.meshdi.api.*;
+import me.bottdev.meshdi.api.exceptions.BeanCreationException;
+import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,7 +25,7 @@ public class FactoryBinding<T> implements Binding<T> {
         private InitializationStrategy initializationStrategy = InitializationStrategy.LAZY;
         private ScopeType scopeType = ScopeType.SINGLETON;
         private BeanFactory<T> factory = null;
-        private final List<DependencyRequest> dependencies = new ArrayList<>();
+        private final List<DependencyRequest<TypedKey<?>>> dependencies = new ArrayList<>();
 
         public Builder<T> init(InitializationStrategy initializationStrategy) {
            this.initializationStrategy = initializationStrategy;
@@ -60,10 +60,10 @@ public class FactoryBinding<T> implements Binding<T> {
 
         public Builder<T> dependsOn(
                 TypedKey<?> dependencyKey,
-                DependRequirement requirement,
+                DependencyLink link,
                 DependOrder order
         ) {
-            dependencies.add(new DependencyRequest(dependencyKey, requirement, order));
+            dependencies.add(new DependencyRequest<>(dependencyKey, link, order));
             return this;
         }
 
@@ -97,14 +97,14 @@ public class FactoryBinding<T> implements Binding<T> {
     @Getter private final ScopeType scopeType;
     private final BeanFactory<T> factory;
 
-    private final List<DependencyRequest> dependencies;
+    private final List<DependencyRequest<TypedKey<?>>> dependencies;
 
     public FactoryBinding(
             TypedKey<T> key,
             InitializationStrategy initializationStrategy,
             ScopeType scopeType,
             BeanFactory<T> factory,
-            List<DependencyRequest> dependencies
+            List<DependencyRequest<TypedKey<?>>> dependencies
     ) {
         Objects.requireNonNull(key, "Binding key must be non-null.");
         Objects.requireNonNull(scopeType, "Binding bean scope must be non-null.");
@@ -118,7 +118,7 @@ public class FactoryBinding<T> implements Binding<T> {
     }
 
     @Override
-    public List<DependencyRequest> getDependencies() {
+    public List<DependencyRequest<TypedKey<?>>> getDependencies() {
         return Collections.unmodifiableList(dependencies);
     }
 
