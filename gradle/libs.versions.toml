@@ -4,7 +4,7 @@ mockito = "5.11.0"
 assertj = "4.0.0-M1"
 lombok = "1.18.38"
 guava = "33.5.0-jre"
-kern = "0.0.14-SNAPSHOT"
+kern = "0.0.16-SNAPSHOT"
 
 
 [libraries]
@@ -22,6 +22,7 @@ guava = { module = "com.google.guava:guava", version.ref = "guava" }
 
 kern-commons = { module = "me.bottdev:kern-commons", version.ref = "kern" }
 kern-struct = { module = "me.bottdev:kern-struct", version.ref = "kern" }
+kern-dependency = { module = "me.bottdev:kern-dependency", version.ref = "kern" }
 
 [bundles]
-kern = [ "kern-commons", "kern-struct" ]
+kern = [ "kern-commons", "kern-struct", "kern-dependency" ]
