@@ -1,4 +1,6 @@
-package me.bottdev.meshdi.api.exceptions;
+package me.bottdev.meshdi.api.exceptions.mesh;
+
+import me.bottdev.meshdi.api.exceptions.DiException;
 
 public class ContextMeshException extends DiException {
 
