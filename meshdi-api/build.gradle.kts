@@ -12,6 +12,6 @@ dependencies {
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
 
-    implementation(libs.bundles.kern)
+    implementation(libs.bundles.kern.default)
 
 }
