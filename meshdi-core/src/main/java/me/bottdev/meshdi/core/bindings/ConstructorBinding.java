@@ -83,7 +83,7 @@ public class ConstructorBinding<T> implements Binding<T> {
                                     "Annotate exactly one constructor with @Inject."
                     );
                     case 1 -> {
-                        Constructor<T> ctor = (Constructor<T>) injected.get(0);
+                        Constructor<T> ctor = (Constructor<T>) injected.getFirst();
                         ctor.setAccessible(true);
                         yield ctor;
                     }
