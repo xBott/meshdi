@@ -4,9 +4,10 @@ mockito = "5.11.0"
 assertj = "4.0.0-M1"
 lombok = "1.18.38"
 guava = "33.5.0-jre"
-kern = "0.0.20-SNAPSHOT"
+kern = "0.0.23-SNAPSHOT"
 auto-service = "1.1.1"
 compile-testing = "0.23.0"
+java-poet = "1.13.0"
 
 
 [libraries]
@@ -29,6 +30,8 @@ kern-struct = { module = "me.bottdev:kern-struct", version.ref = "kern" }
 kern-dependency = { module = "me.bottdev:kern-dependency", version.ref = "kern" }
 kern-meta-core = { module = "me.bottdev:kern-meta-core", version.ref = "kern" }
 kern-meta-apt = { module = "me.bottdev:kern-meta-apt", version.ref = "kern" }
+
+java-poet = { module = "com.squareup:javapoet", version.ref = "java-poet" }
 
 [bundles]
 kern-default = [ "kern-commons", "kern-struct", "kern-dependency" ]
