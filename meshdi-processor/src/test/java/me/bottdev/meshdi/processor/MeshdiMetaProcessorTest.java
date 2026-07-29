@@ -281,4 +281,47 @@ class MeshdiMetaProcessorTest {
             assertThat(compilation).failed();
         }
     }
+
+    @Test
+    @DisplayName("should create a ContextBootstrapImpl")
+    void createsContextBootstrap() {
+
+        Compilation compilation = javac()
+                .withProcessors(new MeshdiMetaProcessor())
+                .compile(JavaFileObjects.forSourceString(
+                        "test.Example",
+                        """
+                        package test;
+                        import me.bottdev.meshdi.api.annotations.Component;
+
+                        @Component
+                        public class Example {
+                            public Example() {}
+                        }
+                        """
+                ));
+
+        assertThat(compilation).succeeded();
+        assertThat(compilation)
+                .generatedSourceFile("test.generated.ContextBoostrapImpl")
+                .hasSourceEquivalentTo(JavaFileObjects.forSourceString(
+                        "test.generated.ContextBootstrapImpl",
+                        """
+                                package test.generated;
+                                
+                                import java.lang.System;
+                                import me.bottdev.meshdi.api.ContextMesh;
+                                
+                                public final class ContextBoostrapImpl {
+                                
+                                    public static void bootstrap(ContextMesh mesh) {
+                                        System.out.println("Bootstrap!");
+                                    }
+                                
+                                }
+                                """
+                ));
+
+    }
+
 }
