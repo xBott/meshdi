@@ -160,7 +160,7 @@ public class DAGContextMesh implements ContextMesh {
             registered.clear();
             registrationOrder.clear();
             reachableContextsCache.clear();
-            //graph.clear()
+            graphView.clear();
         }
     }
 

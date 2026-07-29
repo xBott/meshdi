@@ -53,5 +53,9 @@ public class SimpleContextGraphView implements ContextGraphView {
                 .toList();
     }
 
+    @Override
+    public void clear() {
+        graph.clear();
+    }
 
 }

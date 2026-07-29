@@ -17,4 +17,6 @@ public interface ContextGraphView {
 
     List<String> bfs(String id);
 
+    void clear();
+
 }
