@@ -2,8 +2,9 @@ package me.bottdev.meshdi.core.builders;
 
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependencyResolver;
-import me.bottdev.kern.dependency.exceptions.DependencyException;
 import me.bottdev.kern.dependency.graph.GraphDependencyResolver;
+import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
+import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
@@ -22,7 +23,7 @@ import java.util.function.Function;
 
 public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
 
-    //private DependencyResolver dependencyResolver = new GraphDependencyResolver();
+    private static final DependencyResolver dependencyResolver = new GraphDependencyResolver(new KahnSorter(new SimpleCycleDetector()));
 
     private String id;
     private Map<TypedKey<?>, BindingBuilder<?>> bindingBuilders;
@@ -82,16 +83,13 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
             }
 
             BindingContainer bindingContainer = new SimpleBindingContainer(bindings);
-            //dependencyResolver.resolve(bindingContainer);
+            dependencyResolver.resolve(bindingContainer);
 
             BeanResolver resolver = resolverFactory.apply(bindingContainer);
             return new SimpleContext(id, bindingContainer, lifecycleManager, resolver);
 
         } catch (BindingBuildException ex) {
             throw new ContextBuildException("Failed to create binding.", ex);
-
-//        } catch (DependencyException ex) {
-//            throw new ContextBuildException("Failed to resolve context dependencies.", ex);
 
         } catch (Exception ex) {
             throw new ContextBuildException("Failed to build a context.", ex);
