@@ -1,4 +1,4 @@
-package me.bottdev.meshdi.core.mesh;
+package me.bottdev.meshdi.core.mesh.views;
 
 import me.bottdev.kern.struct.algorithms.traverse.TraversalStep;
 import me.bottdev.kern.struct.algorithms.traverse.Traversals;
@@ -6,12 +6,12 @@ import me.bottdev.kern.struct.graph.EndpointPairs;
 import me.bottdev.kern.struct.graph.MutableGraph;
 import me.bottdev.kern.struct.graph.adjacency.AdjacencyListGraphBuilder;
 import me.bottdev.kern.struct.graph.endpoints.Directed;
+import me.bottdev.meshdi.core.mesh.ContextGraphView;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-public class SimpleContextGraphView implements ContextGraphView {
+public class KernContextGraphView implements ContextGraphView {
 
     private final MutableGraph<String, Directed<String>> graph =
             new AdjacencyListGraphBuilder<String, Directed<String>>().mutable();
@@ -50,6 +50,7 @@ public class SimpleContextGraphView implements ContextGraphView {
                 .allowDuplicates(false)
                 .stream()
                 .map(TraversalStep::node)
+                .filter(contextId -> !contextId.equals(id))
                 .toList();
     }
 

@@ -14,7 +14,7 @@ public class MeshBeanResolver implements BeanResolver {
     private final String contextId;
     private final BindingContainer bindingContainer;
     private final BeanLifecycleManager lifecycleManager;
-    private final ContextMesh mesh;
+    private final ContextMesh<?> mesh;
 
     @Override
     public <T> boolean contains(TypedKey<T> key) {

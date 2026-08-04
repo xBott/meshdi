@@ -2,23 +2,26 @@ package me.bottdev.meshdi.core;
 
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
-import me.bottdev.meshdi.core.mesh.DAGContextMesh;
+import me.bottdev.meshdi.api.exceptions.mesh.MeshRegistrationBuildException;
+import me.bottdev.meshdi.core.mesh.DagContextMesh;
 import org.junit.jupiter.api.*;
 
 import java.util.List;
 
+import static me.bottdev.meshdi.core.mesh.DagContextMesh.registration;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.in;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class DAGContextMeshTest {
+class DagContextMeshTest {
 
-    DAGContextMesh mesh;
+    DagContextMesh mesh;
 
     @BeforeEach
     void setUp() {
-        mesh = new DAGContextMesh();
+        mesh = new DagContextMesh();
     }
 
     @AfterEach
@@ -37,10 +40,10 @@ class DAGContextMeshTest {
 
         @Test
         @DisplayName("contains: returns true if registered")
-        void contains_registered() throws MeshRegisterException {
+        void contains_registered() throws MeshRegisterException, MeshRegistrationBuildException {
             Context context = mock(Context.class);
             when(context.getId()).thenReturn("root");
-            mesh.register(context).submit();
+            mesh.register(registration(context).build());
 
             assertTrue(mesh.contains("root"));
         }
@@ -48,17 +51,17 @@ class DAGContextMeshTest {
     }
 
     @Nested
-    class Registration {
+    class DagMeshRegistration {
 
         @Test
         @DisplayName("register: successful registration of an independent context")
-        void register_independent() throws MeshRegisterException {
+        void register_independent() throws MeshRegisterException, MeshRegistrationBuildException {
 
             boolean before = mesh.contains("root");
 
             Context context = mock(Context.class);
             when(context.getId()).thenReturn("root");
-            mesh.register(context).submit();
+            mesh.register(registration(context).build());
 
             assertFalse(before);
             assertTrue(mesh.contains("root"));
@@ -73,12 +76,10 @@ class DAGContextMeshTest {
             Context context = mock(Context.class);
             when(context.getId()).thenReturn("root");
 
-            assertThrows(MeshRegisterException.class, () -> mesh
-                    .register(context)
-                    .submit()
-                    .register(context)
-                    .submit()
-            );
+            assertThrows(MeshRegisterException.class, () -> {
+                mesh.register(registration(context).build());
+                mesh.register(registration(context).build());
+            });
 
         }
 
@@ -92,14 +93,10 @@ class DAGContextMeshTest {
             Context contextB = mock(Context.class);
             when(contextB.getId()).thenReturn("ctxB");
 
-            assertThrows(MeshRegisterException.class, () -> mesh
-                    .register(contextA)
-                    .sees("ctxB")
-                    .submit()
-                    .register(contextB)
-                    .sees("ctxA")
-                    .submit()
-            );
+            assertThrows(MeshRegisterException.class, () -> {
+                mesh.register(registration(contextA).sees("ctxB").build());
+                mesh.register(registration(contextB).sees("ctxA").build());
+            });
 
         }
 
@@ -111,9 +108,7 @@ class DAGContextMeshTest {
             when(contextA.getId()).thenReturn("ctxA");
 
             assertThrows(MeshRegisterException.class, () -> mesh
-                    .register(contextA)
-                    .sees("root")
-                    .submit()
+                    .register(registration(contextA).sees("root").build())
             );
 
         }
@@ -131,10 +126,10 @@ class DAGContextMeshTest {
 
         @Test
         @DisplayName("contains: returns context if registered")
-        void get_registered() throws MeshRegisterException {
+        void get_registered() throws MeshRegisterException, MeshRegistrationBuildException {
             Context context = mock(Context.class);
             when(context.getId()).thenReturn("root");
-            mesh.register(context).submit();
+            mesh.register(registration(context).build());
 
             assertNotNull(mesh.get("root"));
         }
@@ -152,10 +147,10 @@ class DAGContextMeshTest {
 
         @Test
         @DisplayName("contains: returns an optional with context if registered")
-        void find_registered() throws MeshRegisterException {
+        void find_registered() throws MeshRegisterException, MeshRegistrationBuildException {
             Context context = mock(Context.class);
             when(context.getId()).thenReturn("root");
-            mesh.register(context).submit();
+            mesh.register(registration(context).build());
 
             assertTrue(mesh.find("root").isPresent());
         }
@@ -175,35 +170,23 @@ class DAGContextMeshTest {
 
         @Test
         @DisplayName("contains: returns all reachable context ids from a specified context in transitive way")
-        void get_registered() throws MeshRegisterException {
+        void get_registered() throws MeshRegisterException, MeshRegistrationBuildException {
             Context root = mock(Context.class);
             when(root.getId()).thenReturn("root");
 
             Context intermediate = mock(Context.class);
-            when(root.getId()).thenReturn("intermediate");
+            when(intermediate.getId()).thenReturn("intermediate");
 
             Context ctxA = mock(Context.class);
-            when(root.getId()).thenReturn("ctxA");
+            when(ctxA.getId()).thenReturn("ctxA");
 
             Context ctxB = mock(Context.class);
-            when(root.getId()).thenReturn("ctxB");
+            when(ctxB.getId()).thenReturn("ctxB");
 
-            mesh
-                    .register(root)
-                    .submit()
-
-                    .register(intermediate)
-                    .sees("root")
-                    .submit()
-
-                    .register(ctxA)
-                    .sees("intermediate")
-                    .submit()
-
-                    .register(ctxB)
-                    .sees("ctxA")
-                    .sees("intermediate")
-                    .submit();
+            mesh.register(registration(root).build());
+            mesh.register(registration(intermediate).sees("root").build());
+            mesh.register(registration(ctxA).sees("intermediate").build());
+            mesh.register(registration(ctxB).sees("intermediate").sees("ctxA").build());
 
             List<String> reachableFromRoot = mesh.getTransitiveContexts("root");
             List<String> reachableFromIntermediate = mesh.getTransitiveContexts("intermediate");
@@ -219,11 +202,11 @@ class DAGContextMeshTest {
 
             assertThat(reachableFromCtxA)
                     .hasSize(2)
-                    .containsExactly("intermediate", "root");
+                    .containsExactlyInAnyOrder("intermediate", "root");
 
             assertThat(reachableFromCtxB)
                     .hasSize(3)
-                    .containsExactly("ctxA", "intermediate", "root");
+                    .containsExactlyInAnyOrder("ctxA", "intermediate", "root");
 
         }
 
