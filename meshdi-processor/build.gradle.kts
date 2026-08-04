@@ -1,29 +1,26 @@
-plugins {
-    id("java")
-}
-
-group = "me.bottdev.meshdi"
-version = "0.0.1"
-
-repositories {
-    mavenCentral()
-}
-
 dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.0"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testImplementation(libs.google.compile.testing)
-    testImplementation(libs.assertj.core)
-
     implementation(project(":meshdi-api"))
     implementation(project(":meshdi-core"))
+
+    implementation(libs.guava)
+
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.junit.jupiter)
+
+    testImplementation(libs.assertj.core)
 
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
 
     implementation(libs.bundles.kern.default)
     implementation(libs.bundles.kern.meta)
+
+    testImplementation(libs.google.compile.testing)
+
+
     implementation(libs.google.auto.service)
     implementation(libs.java.poet)
 
