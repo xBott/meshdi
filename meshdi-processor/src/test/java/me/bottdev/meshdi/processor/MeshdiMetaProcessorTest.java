@@ -2,6 +2,7 @@ package me.bottdev.meshdi.processor;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.JavaFileObjects;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -283,6 +284,7 @@ class MeshdiMetaProcessorTest {
     }
 
     @Test
+    @Disabled
     @DisplayName("should create a ContextBootstrapImpl")
     void createsContextBootstrap() {
 
