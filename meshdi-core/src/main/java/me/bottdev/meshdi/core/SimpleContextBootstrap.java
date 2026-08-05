@@ -13,7 +13,6 @@ public class SimpleContextBootstrap {
         SimpleContextBuilder builder = new SimpleContextBuilder();
 
         for (ComponentDefinition<?> definition : ServiceLoader.load(ComponentDefinition.class, classLoader)) {
-            System.out.println(definition);
             BindingBuilder<?> bindingBuilder = definition.create();
             builder.binding(bindingBuilder);
         }

@@ -2,14 +2,13 @@ package me.bottdev.meshdi.core;
 
 import lombok.RequiredArgsConstructor;
 import me.bottdev.kern.commons.Disposable;
-import me.bottdev.kern.commons.exceptions.DisposeException;
+import me.bottdev.kern.commons.registry.Registry;
 import me.bottdev.meshdi.api.*;
-import me.bottdev.meshdi.api.annotations.PreDestroy;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
+import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleException;
 import me.bottdev.meshdi.api.exceptions.BeanResolvationException;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -17,12 +16,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
 
-    //private final Registry<ScopeType, BeanScope> scopeRegistry;
+    private final Registry<ScopeType, BeanScope> scopeRegistry;
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
     private <T> Optional<BeanScope> getScopeByBinding(Binding<T> binding) {
-        return Optional.empty();
-        //return scopeRegistry.find(binding.getScopeType());
+        return scopeRegistry.find(binding.getScopeType());
     }
 
     @Override
@@ -36,13 +34,15 @@ public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
     public <T> T get(Binding<T> binding) {
         return getScopeByBinding(binding)
                 .map(scope -> scope.get(binding.getKey()))
+                .map(BeanInstance::value)
                 .orElse(null);
     }
 
     @Override
     public <T> Optional<T> find(Binding<T> binding) {
         return getScopeByBinding(binding)
-                .map(scope -> scope.get(binding.getKey()));
+                .map(scope -> scope.get(binding.getKey()))
+                .map(BeanInstance::value);
     }
 
     @Override
@@ -57,7 +57,10 @@ public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
 
             BeanScope scope = getScopeByBinding(binding)
                     .orElseThrow(() -> new IllegalArgumentException("Bean Scope does not exist."));
-            return scope.create(binding, resolver);
+            T value = scope.create(binding, resolver);
+            binding.invokeEventHandler(BeanLifecycleEventType.POST_CONSTRUCT, value);
+
+            return value;
 
         } catch (BeanResolvationException ex) {
             throw new BeanLifecycleException(
@@ -89,71 +92,35 @@ public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
     public void dispose() {
         if (disposed.compareAndSet(false, true)) {
 
-//            for (BeanScope scope : scopeRegistry.getAll()) {
-//                List<Object> toDestroy = scope.getDestroyOrder();
-//
-//                for (Object value : toDestroy) {
-//                    try {
-//                        destroy(value);
-//
-//                    } catch (DisposeException ex) {
-//                        System.out.println("Failed to destroy " + value + ". Reason: " + ex.getMessage());
-//                    }
-//
-//                }
-//                scope.dispose();
-//            }
-//
-//            scopeRegistry.clear();
+            for (BeanScope scope : scopeRegistry.getAll()) {
+                List<BeanInstance<?>> toDestroy = scope.getDestroyOrder();
+
+                for (BeanInstance<?> instance : toDestroy) {
+                    try {
+                        destroy(instance);
+
+                    } catch (BeanLifecycleEventHandleException ex) {
+                        System.out.println("Failed to destroy " + instance + ". Reason: " + ex.getMessage());
+                    }
+
+                }
+                scope.dispose();
+            }
+
+            scopeRegistry.clear();
 
         }
     }
 
-    private void destroy(Object value) throws DisposeException {
+    private <T> void destroy(BeanInstance<T> instance) throws BeanLifecycleEventHandleException {
+
+        T value = instance.value();
 
         if (value instanceof Disposable disposable) {
-            try {
-                disposable.dispose();
-
-            } catch (DisposeException ex) {
-                throw new DisposeException(value, "Failed to invoke dispose() method of " + value + ".", ex);
-            }
-
+            disposable.dispose();
         }
 
-        try {
-            invokePreDestroy(value);
-
-        } catch (DisposeException ex) {
-            throw new DisposeException(value, "Failed to invoke @PreDestroy methods of " + value + ".", ex);
-        }
-
-    }
-
-    private void invokePreDestroy(Object value) throws DisposeException {
-
-        Method[] methods = value.getClass().getDeclaredMethods();
-
-        for (Method method : methods) {
-
-            if (!method.isAnnotationPresent(PreDestroy.class)) continue;
-
-            String name = method.getName();
-            if (method.getParameters().length != 0)
-                throw new DisposeException(this,
-                        "@PreDestroy method " + name + " of " + value.getClass().getName() + " can not have parameters.");
-
-            try {
-                method.setAccessible(true);
-                method.invoke(value);
-
-            } catch (Exception ex) {
-                throw new DisposeException(this,
-                        "Failed to invoke @PreDestroy method " + name + " of " + value.getClass().getName(), ex);
-
-            }
-
-        }
+        instance.binding().invokeEventHandler(BeanLifecycleEventType.PRE_DESTROY, value);
 
     }
 

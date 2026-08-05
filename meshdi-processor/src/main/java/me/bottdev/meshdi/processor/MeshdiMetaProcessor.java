@@ -12,11 +12,14 @@ import me.bottdev.kern.meta.core.MessageType;
 import me.bottdev.kern.meta.core.configuration.ProcessorConfigurationBuilder;
 import me.bottdev.kern.meta.core.models.ModelKind;
 import me.bottdev.kern.meta.core.models.executable.ConstructorModel;
+import me.bottdev.kern.meta.core.models.executable.MethodModel;
+import me.bottdev.kern.meta.core.models.type.ClassModel;
 import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.annotations.Component;
 import me.bottdev.meshdi.api.annotations.Dependency;
+import me.bottdev.meshdi.api.annotations.OnLifecycleEvent;
 import me.bottdev.meshdi.core.bindings.FactoryBinding;
 
 import javax.annotation.processing.Processor;
@@ -68,6 +71,32 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                                 return error(data.getKey() + " has multiple constructors annotated with @Inject. Exactly one constructor must carry @Inject.");
                             return ok();
                         })
+                        .rule(data -> {
+                            for (Map.Entry<BeanLifecycleEventType, List<MethodModel>> entry : getEventMethods(data.getModel()).entrySet()) {
+                                BeanLifecycleEventType type = entry.getKey();
+
+                                for (MethodModel method : entry.getValue()) {
+                                    String methodName = method.simpleName();
+                                    String componentName = data.getModel().qualifiedName();
+                                    String eventName = "@OnLifecycleEvent(" + type + ")";
+
+                                    if (!method.parameters().isEmpty()) {
+                                        return error(eventName + " method " + methodName + " of " + componentName + " can not have parameters.");
+                                    }
+                                    if (!"void".equals(method.returnType().qualifiedName())) {
+                                        return error(eventName + " method " + methodName + " of " + componentName + " must return void.");
+                                    }
+                                    if (hasModifier(method, "private")) {
+                                        return error(eventName + " method " + methodName + " of " + componentName + " can not be private.");
+                                    }
+                                    if (hasModifier(method, "static")) {
+                                        return error(eventName + " method " + methodName + " of " + componentName + " can not be static.");
+                                    }
+                                }
+                            }
+
+                            return ok();
+                        })
                         .rule(data -> discoveredComponents.add(data.getKey()) ? ok() : error(data.getKey() + " found duplicate component key"))
                 )
                 .map(data -> {
@@ -102,13 +131,16 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                             })
                             .toList();
 
+                    Map<BeanLifecycleEventType, List<MethodModel>> eventMethods = getEventMethods(data.getModel());
+
                     return new ComponentRepresentation(
                             data.getModel(),
                             data.getClassName(),
                             data.getQualifier(),
                             data.getInitializationStrategy(),
                             data.getScopeType(),
-                            dependencies
+                            dependencies,
+                            eventMethods
                     );
 
                 })
@@ -149,6 +181,27 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                     generateServiceFile(ordered);
                 });
 
+    }
+
+    private static Map<BeanLifecycleEventType, List<MethodModel>> getEventMethods(ClassModel model) {
+
+        Map<BeanLifecycleEventType, List<MethodModel>> eventMethods = new EnumMap<>(BeanLifecycleEventType.class);
+
+        model.methods().stream()
+                .filter(method -> method.annotation(OnLifecycleEvent.class).isPresent())
+                .forEach(method -> {
+                    OnLifecycleEvent lifecycleEvent = method.annotation(OnLifecycleEvent.class).orElseThrow();
+                    BeanLifecycleEventType eventType = lifecycleEvent.value();
+                    eventMethods.computeIfAbsent(eventType, k -> new ArrayList<>()).add(method);
+                });
+
+        return eventMethods;
+    }
+
+    private static boolean hasModifier(MethodModel method, String modifier) {
+        return method.modifiers().stream()
+                .map(me.bottdev.kern.meta.core.models.Modifier::name)
+                .anyMatch(name -> name.equals(modifier) || name.equalsIgnoreCase(modifier));
     }
 
     private MethodSpec generateCreateMethod(
@@ -192,7 +245,6 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
 
         dependencies.forEach(dependency -> {
             String dependencyKey = dependency.key();
-            context().logger().message(MessageType.INFO, dependencyKey);
             ComponentRepresentation dependencyRepresentation = representations.get(dependencyKey);
             ClassName dependencyClassName = ClassName.bestGuess(dependencyRepresentation.getModel().qualifiedName());
 
@@ -227,7 +279,6 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
         for (int i = 0; i < dependencies.size(); i++) {
             DependencyRequest<String> dependency = dependencies.get(i);
             String dependencyKey = dependency.key();
-            context().logger().message(MessageType.INFO, dependencyKey);
             ComponentRepresentation dependencyRepresentation = representations.get(dependencyKey);
             ClassName dependencyClassName = ClassName.bestGuess(dependencyRepresentation.getModel().qualifiedName());
 
@@ -260,6 +311,17 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
         builder.addStatement(returnStatement.toString(), componentClassName);
 
         builder.endControlFlow(")");
+
+        for (BeanLifecycleEventType type : BeanLifecycleEventType.values()) {
+
+            if (!representation.hasEventMethods(type)) continue;
+
+            builder.beginControlFlow("builder.eventHandler($T.$L, bean ->", BeanLifecycleEventType.class, type);
+            representation.getEventMethods(type)
+                    .forEach(method -> builder.addStatement("bean.$L()", method.simpleName()));
+            builder.endControlFlow(")");
+
+        }
 
         StringBuilder statement = new StringBuilder("builder");
         switch (representation.getInitializationStrategy()) {
@@ -321,7 +383,7 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
     }
 
     private void generateServiceFile(List<ComponentRepresentation> representations) {
-        String path = "META-INF/services/me.bottdev.meshdi.api.ComponentDefinition";
+        String path = "META-INF/services/" + ComponentDefinition.class.getCanonicalName();
         try (FileWriter writer = context().fileFactory().createWriter(path)) {
 
             writer.open();

@@ -1,6 +1,7 @@
 package me.bottdev.meshdi.core.scopes;
 
 import me.bottdev.kern.commons.key.TypedKey;
+import me.bottdev.meshdi.api.BeanInstance;
 import me.bottdev.meshdi.api.BeanResolver;
 import me.bottdev.meshdi.api.BeanScope;
 import me.bottdev.meshdi.api.Binding;
@@ -14,7 +15,7 @@ public class PrototypeScope implements BeanScope {
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
     @Override
-    public List<Object> getDestroyOrder() {
+    public List<BeanInstance<?>> getDestroyOrder() {
         return List.of();
     }
 
@@ -24,7 +25,7 @@ public class PrototypeScope implements BeanScope {
     }
 
     @Override
-    public <T> T get(TypedKey<T> key) {
+    public <T> BeanInstance<T> get(TypedKey<T> key) {
         return null;
     }
 

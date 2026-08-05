@@ -4,9 +4,8 @@ import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextStartException;
 import me.bottdev.meshdi.core.SimpleContextBootstrap;
-import me.bottdev.meshdi.core.builders.SimpleContextBuilder;
 
-//import static me.bottdev.kern.commons.key.KeyUtils.key;
+import static me.bottdev.kern.commons.key.KeyUtils.key;
 
 public class Main {
 
@@ -18,8 +17,10 @@ public class Main {
                 .build();
         context.start();
 
-//        SomeService someService = context.getResolver().get(key(SomeService.class));
-//        System.out.println(someService);
+        AnotherService anotherService = context.getResolver().get(key(AnotherService.class));
+        System.out.println(anotherService);
+
+        context.dispose();
 
     }
 

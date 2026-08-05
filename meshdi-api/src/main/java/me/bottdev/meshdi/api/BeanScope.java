@@ -8,11 +8,11 @@ import java.util.List;
 
 public interface BeanScope extends Disposable {
 
-    List<Object> getDestroyOrder();
+    List<BeanInstance<?>> getDestroyOrder();
 
     <T> boolean contains(TypedKey<T> key);
 
-    <T> T get(TypedKey<T> key);
+    <T> BeanInstance<T> get(TypedKey<T> key);
 
     <T> T create(Binding<T> binding, BeanResolver resolver) throws BeanCreationException;
 
