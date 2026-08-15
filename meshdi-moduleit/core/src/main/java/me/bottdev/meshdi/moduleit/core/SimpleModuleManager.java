@@ -11,6 +11,7 @@ import me.bottdev.kern.dependency.ResolutionResult;
 import me.bottdev.kern.dependency.StatefulDependencyResolver;
 import me.bottdev.kern.dependency.containers.SimpleDependentContainer;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
+import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
@@ -145,6 +146,7 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleDescriptor descriptor = candidate.descriptor();
             String moduleId = descriptor.id();
+            SemVersion version = descriptor.version();
             List<String> dependencyIds = descriptor.getVersionedDependencies().stream()
                     .map(VersionedDependencyRequest::key)
                     .toList();
@@ -156,7 +158,7 @@ public class SimpleModuleManager implements ModuleManager {
             handles.put(moduleId, handle);
             loadEnvironment.exportRegistry().register(moduleId, exports, classLoader);
 
-            diagnosticsBuilder.append(ModuleDiagnostic.loaded(moduleId));
+            diagnosticsBuilder.append(ModuleDiagnostic.loaded(moduleId, version));
 
         }
 
@@ -191,7 +193,6 @@ public class SimpleModuleManager implements ModuleManager {
             Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
                     .id(descriptor.id())
                     .build();
-            moduleContext.start();
 
             List<String> sees = descriptor.getVersionedDependencies().stream()
                     .map(VersionedDependencyRequest::key)
@@ -199,6 +200,7 @@ public class SimpleModuleManager implements ModuleManager {
 
             DagContextMesh.DagMeshRegistration registration = new DagContextMesh.DagMeshRegistration(moduleContext, sees);
             Context meshViewContext = contextMesh.register(registration);
+            meshViewContext.start();
 
             simpleHandle.setContext(meshViewContext);
             simpleHandle.setState(ModuleState.STARTED);

@@ -40,9 +40,10 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
     }
 
     static ModuleDiagnostic loaded(
-            @NonNull String id
+            @NonNull String id,
+            @NonNull SemVersion version
     ) {
-        return new Loaded(id);
+        return new Loaded(id, version);
     }
 
     record AlreadyLoaded(String id) implements ModuleDiagnostic {
@@ -101,7 +102,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
     }
 
-    record Loaded(String id) implements ModuleDiagnostic {
+    record Loaded(String id, SemVersion version) implements ModuleDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -110,7 +111,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
         @Override
         public String message() {
-            return "Successfully loaded module: " + id;
+            return "Successfully loaded module: " + id + " " + version;
         }
 
     }
