@@ -12,6 +12,8 @@ dependencies {
     implementation(libs.bundles.kern.default)
     implementation(libs.kern.version)
 
+    implementation(project(":meshdi-example:root-module"))
+
 }
 
 tasks.register<Copy>("copyJar") {
