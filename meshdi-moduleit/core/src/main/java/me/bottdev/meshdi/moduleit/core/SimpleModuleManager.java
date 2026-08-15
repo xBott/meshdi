@@ -135,10 +135,12 @@ public class SimpleModuleManager implements ModuleManager {
         DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleDiagnostic> diagnosticResult =
                 resolveCandidates(uniqueCandidates, diagnosticsBuilder);
 
-        Diagnostics<ModuleDiagnostic> diagnostics = diagnosticResult.unwrapDiagnostics();
-        if (!diagnosticResult.isPresent()) return diagnostics;
+        if (!diagnosticResult.isPresent()) {
+            return diagnosticResult.unwrapDiagnostics();
+        }
 
         ResolutionResult<String, ModuleCandidate> resolutionResult = diagnosticResult.unwrap();
+
         for (ModuleCandidate candidate : resolutionResult.ordered()) {
 
             ModuleDescriptor descriptor = candidate.descriptor();
@@ -154,9 +156,11 @@ public class SimpleModuleManager implements ModuleManager {
             handles.put(moduleId, handle);
             loadEnvironment.exportRegistry().register(moduleId, exports, classLoader);
 
+            diagnosticsBuilder.append(ModuleDiagnostic.loaded(moduleId));
+
         }
 
-        return diagnostics;
+        return diagnosticsBuilder.build();
 
     }
 

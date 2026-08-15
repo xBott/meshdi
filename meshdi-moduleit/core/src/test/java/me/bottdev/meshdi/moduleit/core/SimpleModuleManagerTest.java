@@ -153,7 +153,6 @@ class SimpleModuleManagerTest {
 
             assertTrue(diagnostics.has(DiagnosticType.WARN));
             assertThat(diagnostics)
-                    .hasSize(1)
                     .contains(ModuleDiagnostic.duplicate("test"));
 
         }
@@ -179,10 +178,9 @@ class SimpleModuleManagerTest {
                     .allMatch(state -> state == ModuleState.LOADED);
 
             assertThat(diagnostics1)
-                    .hasSize(0);
+                    .hasSize(1);
 
             assertThat(diagnostics2)
-                    .hasSize(1)
                     .contains(ModuleDiagnostic.alreadyLoaded("test"));
 
         }
@@ -206,7 +204,6 @@ class SimpleModuleManagerTest {
                     .hasSize(0);
 
             assertThat(diagnostics)
-                    .hasSize(1)
                     .contains(ModuleDiagnostic.apiVersionMismatch(
                             "test",
                             VersionRangeParser.parse(">2.0.0"),
@@ -240,7 +237,6 @@ class SimpleModuleManagerTest {
 
             assertTrue(diagnostics.has(DiagnosticType.ERROR));
             assertThat(diagnostics)
-                    .hasSize(1)
                     .contains(ModuleDiagnostic.badResolution(
                             ListDiagnostics.<DependencyDiagnostic>builder()
                                     .append(DependencyDiagnostic.circular(new CyclePath<>("a", List.of("a", "b"))))

@@ -13,7 +13,8 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
         ModuleDiagnostic.AlreadyLoaded,
         ModuleDiagnostic.Duplicate,
         ModuleDiagnostic.ApiVersionMismatch,
-        ModuleDiagnostic.BadResolution
+        ModuleDiagnostic.BadResolution,
+        ModuleDiagnostic.Loaded
 {
 
     static ModuleDiagnostic alreadyLoaded(@NonNull String id) {
@@ -36,6 +37,12 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
             @NonNull Diagnostics<DependencyDiagnostic> diagnostics
     ) {
         return new BadResolution(diagnostics);
+    }
+
+    static ModuleDiagnostic loaded(
+            @NonNull String id
+    ) {
+        return new Loaded(id);
     }
 
     record AlreadyLoaded(String id) implements ModuleDiagnostic {
@@ -90,6 +97,20 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
         @Override
         public String message() {
             return "Module resolution has failed.\n" + diagnostics;
+        }
+
+    }
+
+    record Loaded(String id) implements ModuleDiagnostic {
+
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "Successfully loaded module: " + id;
         }
 
     }
