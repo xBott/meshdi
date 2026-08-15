@@ -255,7 +255,7 @@ class MeshdiMetaProcessorTest {
                     );
 
             assertThat(compilation).failed();
-            assertThat(compilation).hadErrorContaining("Circular dependency is found in the graph");
+            assertThat(compilation).hadErrorContaining("Circular dependency");
 
         }
 

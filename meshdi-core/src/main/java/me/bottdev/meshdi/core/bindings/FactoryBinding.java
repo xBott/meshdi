@@ -6,6 +6,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
@@ -68,7 +69,7 @@ public class FactoryBinding<T> implements Binding<T> {
                 DependencyLink link,
                 DependOrder order
         ) {
-            dependencies.add(new DependencyRequest<>(dependencyKey, link, order));
+            dependencies.add(new SimpleDependencyRequest<>(dependencyKey, link, order));
             return this;
         }
 

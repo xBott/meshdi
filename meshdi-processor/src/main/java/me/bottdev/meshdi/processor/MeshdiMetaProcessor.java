@@ -3,6 +3,7 @@ package me.bottdev.meshdi.processor;
 import com.google.auto.service.AutoService;
 import com.squareup.javapoet.*;
 import me.bottdev.kern.commons.key.KeyUtils;
+import me.bottdev.kern.commons.wrapper.DiagnosticResult;
 import me.bottdev.kern.dependency.*;
 import me.bottdev.kern.dependency.containers.SimpleDependentContainer;
 import me.bottdev.kern.dependency.graph.GraphDependencyResolver;
@@ -102,7 +103,7 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                 .map(data -> {
 
                     ConstructorModel constructor = data.getCorrectConstructor();
-                    List<DependencyRequest<String>> dependencies = constructor.parameters().stream()
+                    List<SimpleDependencyRequest<String>> dependencies = constructor.parameters().stream()
                             .map(parameterModel -> {
 
                                 String typeName = parameterModel.type().qualifiedName();
@@ -115,14 +116,14 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                                     DependOrder order = dependency.order();
                                     String dependencyKey = qualifier.isBlank() ? typeName : typeName + "@" + qualifier;
 
-                                    return new DependencyRequest<>(
+                                    return new SimpleDependencyRequest<>(
                                             dependencyKey,
                                             link,
                                             order
                                     );
 
                                 } else {
-                                    return new DependencyRequest<>(
+                                    return new SimpleDependencyRequest<>(
                                             typeName,
                                             DependencyLink.REQUIRED,
                                             DependOrder.AFTER
@@ -155,7 +156,11 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                     DependentContainer<String, ComponentRepresentation> container = containerBuilder.build();
 
                     try {
-                        ResolutionResult<ComponentRepresentation> result = dependencyResolver.resolve(container);
+                        DiagnosticResult<ResolutionResult<String, ComponentRepresentation>, DependencyDiagnostic> diagnosticResult =
+                                dependencyResolver.resolve(container);
+
+                        ResolutionResult<String, ComponentRepresentation> result = diagnosticResult.unwrapOrThrow();
+
                         return DependencyResolutionResult.ok(result.ordered());
 
                     } catch (Exception ex) {
@@ -196,6 +201,19 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                 });
 
         return eventMethods;
+    }
+
+    private static String getDependencyTypeName(DependencyRequest<String> dependency) {
+        String key = dependency.key();
+        int qualifierSeparator = key.indexOf('@');
+        return qualifierSeparator < 0 ? key : key.substring(0, qualifierSeparator);
+    }
+
+    private static Optional<String> getDependencyQualifier(DependencyRequest<String> dependency) {
+        String key = dependency.key();
+        int qualifierSeparator = key.indexOf('@');
+        if (qualifierSeparator < 0) return Optional.empty();
+        return Optional.of(key.substring(qualifierSeparator + 1));
     }
 
     private static boolean hasModifier(MethodModel method, String modifier) {
@@ -244,17 +262,15 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
 
 
         dependencies.forEach(dependency -> {
-            String dependencyKey = dependency.key();
-            ComponentRepresentation dependencyRepresentation = representations.get(dependencyKey);
-            ClassName dependencyClassName = ClassName.bestGuess(dependencyRepresentation.getModel().qualifiedName());
+            ClassName dependencyClassName = ClassName.bestGuess(getDependencyTypeName(dependency));
+            Optional<String> qualifier = getDependencyQualifier(dependency);
 
-            if (dependencyRepresentation.hasQualifier()) {
-                String qualifier = dependencyRepresentation.getQualifier();
+            if (qualifier.isPresent()) {
                 builder.addStatement(
                         "builder.dependsOn($T.key($T.class, $S), $T.$L, $T.$L)",
                         KeyUtils.class,
                         dependencyClassName,
-                        qualifier,
+                        qualifier.get(),
                         DependencyLink.class,
                         dependency.link(),
                         DependOrder.class,
@@ -278,19 +294,17 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
 
         for (int i = 0; i < dependencies.size(); i++) {
             DependencyRequest<String> dependency = dependencies.get(i);
-            String dependencyKey = dependency.key();
-            ComponentRepresentation dependencyRepresentation = representations.get(dependencyKey);
-            ClassName dependencyClassName = ClassName.bestGuess(dependencyRepresentation.getModel().qualifiedName());
+            ClassName dependencyClassName = ClassName.bestGuess(getDependencyTypeName(dependency));
+            Optional<String> qualifier = getDependencyQualifier(dependency);
 
-            if (dependencyRepresentation.hasQualifier()) {
-                String qualifier = dependencyRepresentation.getQualifier();
+            if (qualifier.isPresent()) {
                 builder.addStatement(
-                        "$T dependency$L = resolver.get($T.key($T.class), $S)",
+                        "$T dependency$L = resolver.get($T.key($T.class, $S))",
                         dependencyClassName,
                         i,
                         KeyUtils.class,
                         dependencyClassName,
-                        qualifier
+                        qualifier.get()
                 );
             } else {
                 builder.addStatement(

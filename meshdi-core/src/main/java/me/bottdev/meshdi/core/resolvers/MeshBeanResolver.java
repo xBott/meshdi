@@ -18,14 +18,16 @@ public class MeshBeanResolver implements BeanResolver {
 
     @Override
     public <T> boolean contains(TypedKey<T> key) {
-        if (bindingContainer.contains(key)) return true;
+        if (bindingContainer.containsBinding(key)) return true;
         return mesh.canLookup(contextId, key);
     }
 
     @Override
     public <T> T get(TypedKey<T> key) {
-        if (bindingContainer.contains(key)) {
-            Binding<T> binding = bindingContainer.get(key);
+
+        if (bindingContainer.containsBinding(key)) {
+
+            Binding<T> binding = bindingContainer.getBinding(key);
 
             try {
                 return lifecycleManager.getOrCreate(binding, this);
@@ -58,8 +60,9 @@ public class MeshBeanResolver implements BeanResolver {
 
     @Override
     public <T> Optional<T> find(TypedKey<T> key) {
-        if (bindingContainer.contains(key)) {
-            Binding<T> binding = bindingContainer.get(key);
+
+        if (bindingContainer.containsBinding(key)) {
+            Binding<T> binding = bindingContainer.getBinding(key);
 
             try {
                 T value = lifecycleManager.getOrCreate(binding, this);
@@ -94,7 +97,7 @@ public class MeshBeanResolver implements BeanResolver {
 
     @Override
     public <T> Binding<T> getBinding(TypedKey<T> key) {
-        if (bindingContainer.contains(key)) return bindingContainer.get(key);
+        if (bindingContainer.containsBinding(key)) return bindingContainer.getBinding(key);
         return mesh.lookup(contextId, key).map(ContextMeshLookup::binding).orElse(null);
     }
 

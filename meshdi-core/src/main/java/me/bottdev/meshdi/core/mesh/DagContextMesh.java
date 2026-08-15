@@ -7,7 +7,9 @@ import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegistrationBuildException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshUnregisterPlanException;
+import me.bottdev.meshdi.core.context.MeshViewContext;
 import me.bottdev.meshdi.core.mesh.views.KernContextGraphView;
+import me.bottdev.meshdi.core.resolvers.MeshBeanResolver;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -62,11 +64,12 @@ public class DagContextMesh implements ContextMesh<DagContextMesh.DagMeshRegistr
     }
 
     @Override
-    public void register(DagMeshRegistration registration)
+    public Context register(DagMeshRegistration registration)
             throws MeshRegisterException
     {
 
-        String contextId = registration.context().getId();
+        Context context = registration.context();
+        String contextId = context.getId();
         List<String> sees = registration.sees();
 
         if (contains(contextId))
@@ -90,11 +93,23 @@ public class DagContextMesh implements ContextMesh<DagContextMesh.DagMeshRegistr
 
             invalidateCache();
 
+            return createViewContext(context);
+
         } catch (Exception ex) {
             throw new MeshRegisterException("Failed to submit registration of context.", ex);
 
         }
 
+    }
+
+    private Context createViewContext(Context delegate) {
+        MeshBeanResolver resolver = new MeshBeanResolver(
+                delegate.getId(),
+                delegate.getBindingContainer(),
+                delegate.getLifecycleManager(),
+                this
+        );
+        return new MeshViewContext(delegate, resolver);
     }
 
     @Override
@@ -178,11 +193,12 @@ public class DagContextMesh implements ContextMesh<DagContextMesh.DagMeshRegistr
             if (registration == null) continue;
 
             Context context = registration.context();
-            if (context.getBindingContainer().contains(key)) continue;
+
+            if (!context.getBindingContainer().containsBinding(key)) continue;
 
             ContextMeshLookup<T> lookup = new ContextMeshLookup<>(
                     context,
-                    context.getBindingContainer().get(key)
+                    context.getBindingContainer().getBinding(key)
             );
 
             return Optional.of(lookup);

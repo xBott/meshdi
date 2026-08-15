@@ -7,6 +7,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.annotations.Dependency;
 import me.bottdev.meshdi.api.annotations.Inject;
@@ -169,7 +170,7 @@ public class ConstructorBinding<T> implements Binding<T> {
     private DependencyRequest<TypedKey<?>> getParameterDependencyRequest(Parameter parameter) {
         Class<?> type = parameter.getType();
         if (!parameter.isAnnotationPresent(Dependency.class))
-            return new DependencyRequest<>(SimpleTypedKey.of(type), DependencyLink.REQUIRED, DependOrder.AFTER);
+            return new SimpleDependencyRequest<>(SimpleTypedKey.of(type), DependencyLink.REQUIRED, DependOrder.AFTER);
 
         Dependency dependency = parameter.getAnnotation(Dependency.class);
         String qualifier = dependency.qualifier();
@@ -179,7 +180,7 @@ public class ConstructorBinding<T> implements Binding<T> {
                 SimpleTypedKey.of(type) :
                 SimpleTypedKey.of(type, qualifier);
 
-        return new DependencyRequest<>(key, link, order);
+        return new SimpleDependencyRequest<>(key, link, order);
     }
 
     private void fetchDependenciesFromConstructor() {

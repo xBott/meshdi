@@ -13,7 +13,7 @@ public interface ContextMesh<R extends MeshRegistration> extends Disposable {
 
     boolean contains(String id);
 
-    void register(R registration) throws MeshRegisterException;
+    Context register(R registration) throws MeshRegisterException;
 
     MeshUnregisterCommand planUnregister(String id, MeshUnregisterStrategy strategy)
             throws MeshUnregisterPlanException;

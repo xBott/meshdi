@@ -2,9 +2,6 @@ dependencies {
 
     implementation(project(":meshdi-api"))
     implementation(project(":meshdi-core"))
-    annotationProcessor(project(":meshdi-processor"))
-
-    implementation(libs.guava)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -18,5 +15,6 @@ dependencies {
     annotationProcessor(libs.lombok)
 
     implementation(libs.bundles.kern.default)
+    implementation(libs.kern.version)
 
 }

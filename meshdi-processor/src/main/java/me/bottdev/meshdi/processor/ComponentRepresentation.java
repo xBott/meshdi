@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Singular;
 import me.bottdev.kern.dependency.DependencyAware;
 import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.kern.meta.core.models.executable.MethodModel;
 import me.bottdev.kern.meta.core.models.type.ClassModel;
 import me.bottdev.meshdi.api.BeanLifecycleEventType;
@@ -33,7 +34,7 @@ class ComponentRepresentation implements DependencyAware<String> {
             String qualifier,
             InitializationStrategy initializationStrategy,
             ScopeType scopeType,
-            @Singular List<DependencyRequest<String>> dependencies,
+            @Singular List<SimpleDependencyRequest<String>> dependencies,
             Map<BeanLifecycleEventType, List<MethodModel>> eventMethods
     ) {
         this.model = model;
