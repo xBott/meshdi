@@ -7,6 +7,8 @@ import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.meshdi.moduleit.api.*;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
 import me.bottdev.meshdi.moduleit.core.SimpleModuleExportRegistry;
@@ -39,11 +41,11 @@ public class App {
         ModuleManager manager = new SimpleModuleManager(resolver, loadEnvironment);
         ModuleRepository repository = new LocalModuleRepository(Path.of(pathStr));
 
-        Diagnostics<ModuleDiagnostic> diagnostics = manager.load(repository);
-        System.out.println(diagnostics);
+        Diagnostics<ModuleLoadDiagnostic> loadDiagnostics = manager.load(repository);
+        System.out.println(loadDiagnostics);
 
-        manager.start("root");
-        manager.start("tool");
+        Diagnostics<ModuleStartDiagnostic> startDiagnostics = manager.startAll();
+        System.out.println(startDiagnostics);
 
     }
 

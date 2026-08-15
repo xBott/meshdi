@@ -20,6 +20,8 @@ import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
 import me.bottdev.meshdi.core.SimpleContextBootstrap;
 import me.bottdev.meshdi.core.mesh.DagContextMesh;
 import me.bottdev.meshdi.moduleit.api.*;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
 
@@ -65,7 +67,7 @@ public class SimpleModuleManager implements ModuleManager {
 
     private Collection<ModuleCandidate> prepareCandidates(
             List<ModuleCandidate> candidates,
-            DiagnosticsBuilder<ModuleDiagnostic> diagnosticsBuilder
+            DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder
     ) {
 
         Map<String, ModuleCandidate> uniqueCandidates = new HashMap<>();
@@ -77,17 +79,17 @@ public class SimpleModuleManager implements ModuleManager {
             VersionRange requiredApiVersion = descriptor.apiVersion();
 
             if (exists(moduleId)) {
-                diagnosticsBuilder.append(ModuleDiagnostic.alreadyLoaded(moduleId));
+                diagnosticsBuilder.append(ModuleLoadDiagnostic.alreadyLoaded(moduleId));
                 continue;
             }
 
             if (uniqueCandidates.containsKey(moduleId)) {
-                diagnosticsBuilder.append(ModuleDiagnostic.duplicate(moduleId));
+                diagnosticsBuilder.append(ModuleLoadDiagnostic.duplicate(moduleId));
                 continue;
             }
 
             if (!requiredApiVersion.satisfies(loadEnvironment.apiVersion())) {
-                diagnosticsBuilder.append(ModuleDiagnostic.apiVersionMismatch(
+                diagnosticsBuilder.append(ModuleLoadDiagnostic.apiVersionMismatch(
                         moduleId,
                         requiredApiVersion,
                         loadEnvironment.apiVersion())
@@ -102,9 +104,9 @@ public class SimpleModuleManager implements ModuleManager {
         return uniqueCandidates.values();
     }
 
-    private DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleDiagnostic> resolveCandidates(
+    private DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleLoadDiagnostic> resolveCandidates(
             Collection<ModuleCandidate> uniqueCandidates,
-            DiagnosticsBuilder<ModuleDiagnostic> diagnosticsBuilder
+            DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder
     ) {
 
         DependentContainer<String, ModuleCandidate> container = SimpleDependentContainer.<String, ModuleCandidate>builder()
@@ -118,7 +120,7 @@ public class SimpleModuleManager implements ModuleManager {
             return DiagnosticResult.success(diagnosticResult.unwrap(), diagnosticsBuilder.build());
 
         } else {
-            diagnosticsBuilder.append(ModuleDiagnostic.badResolution(diagnosticResult.unwrapDiagnostics()));
+            diagnosticsBuilder.append(ModuleLoadDiagnostic.badResolution(diagnosticResult.unwrapDiagnostics()));
             return DiagnosticResult.failure(diagnosticsBuilder.build());
 
         }
@@ -126,14 +128,14 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public Diagnostics<ModuleDiagnostic> load(ModuleRepository repository) throws CandidateListException {
+    public Diagnostics<ModuleLoadDiagnostic> load(ModuleRepository repository) throws CandidateListException {
 
         List<ModuleCandidate> candidates = repository.candidates();
 
-        DiagnosticsBuilder<ModuleDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+        DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
 
         Collection<ModuleCandidate> uniqueCandidates = prepareCandidates(candidates, diagnosticsBuilder);
-        DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleDiagnostic> diagnosticResult =
+        DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleLoadDiagnostic> diagnosticResult =
                 resolveCandidates(uniqueCandidates, diagnosticsBuilder);
 
         if (!diagnosticResult.isPresent()) {
@@ -158,7 +160,7 @@ public class SimpleModuleManager implements ModuleManager {
             handles.put(moduleId, handle);
             loadEnvironment.exportRegistry().register(moduleId, exports, classLoader);
 
-            diagnosticsBuilder.append(ModuleDiagnostic.loaded(moduleId, version));
+            diagnosticsBuilder.append(ModuleLoadDiagnostic.loaded(moduleId, version));
 
         }
 
@@ -172,53 +174,123 @@ public class SimpleModuleManager implements ModuleManager {
         handle.setState(ModuleState.FAILED);
     }
 
+    private void start(SimpleModuleHandle handle) throws
+            IllegalStateException,
+            ContextBuildException,
+            ContextStartException,
+            MeshRegisterException
+    {
+
+        ModuleState currentState = handle.state();
+        if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED)
+            throw new IllegalStateException("Required LOADED or STOPPED state to start the module. Actual: " + currentState + ".");
+
+        handle.setState(ModuleState.STARTING);
+
+        ModuleDescriptor descriptor = handle.descriptor();
+
+        Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
+                .id(descriptor.id())
+                .build();
+
+        List<String> sees = descriptor.getVersionedDependencies().stream()
+                .map(VersionedDependencyRequest::key)
+                .toList();
+
+        DagContextMesh.DagMeshRegistration registration = new DagContextMesh.DagMeshRegistration(moduleContext, sees);
+        Context meshViewContext = contextMesh.register(registration);
+        meshViewContext.start();
+
+        handle.setContext(meshViewContext);
+        handle.setState(ModuleState.STARTED);
+
+    }
+
     @Override
     public void start(String id) throws ModuleStartException {
-
         if (!exists(id))
             throw new ModuleStartException("Module \"" + id + "\" does not exist.");
 
         ModuleHandle handle = getHandle(id);
-        ModuleState currentState = handle.state();
-        if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED)
-            throw new ModuleStartException("Required LOADED or STOPPED state to start the module. Actual: " + currentState + ".");
-
         SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
-        simpleHandle.setState(ModuleState.STARTING);
 
+        boolean success = false;
         try {
+            start(simpleHandle);
+            success = true;
 
-            ModuleDescriptor descriptor = handle.descriptor();
-
-            Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
-                    .id(descriptor.id())
-                    .build();
-
-            List<String> sees = descriptor.getVersionedDependencies().stream()
-                    .map(VersionedDependencyRequest::key)
-                    .toList();
-
-            DagContextMesh.DagMeshRegistration registration = new DagContextMesh.DagMeshRegistration(moduleContext, sees);
-            Context meshViewContext = contextMesh.register(registration);
-            meshViewContext.start();
-
-            simpleHandle.setContext(meshViewContext);
-            simpleHandle.setState(ModuleState.STARTED);
+        } catch (IllegalStateException ex) {
+            throw new ModuleStartException("Starting module from incorrect state.", ex);
 
         } catch (ContextBuildException ex) {
-            handleModuleError(simpleHandle);
-            throw new ModuleStartException("Failed to bootstrap module context not load.", ex);
+            throw new ModuleStartException("Failed to bootstrap module context from class loader.", ex);
 
         } catch (ContextStartException ex) {
-            handleModuleError(simpleHandle);
             throw new ModuleStartException("Failed to start module context.", ex);
 
         } catch (MeshRegisterException ex) {
-            handleModuleError(simpleHandle);
-            throw new ModuleStartException("Failed to register module context in a mesh.", ex);
+            throw new ModuleStartException("Failed to register module in a context mesh.", ex);
+
+        } finally {
+            if (!success) handleModuleError(simpleHandle);
 
         }
 
+    }
+
+    @Override
+    public Diagnostics<ModuleStartDiagnostic> startAll() {
+
+        DiagnosticsBuilder<ModuleStartDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+
+
+        int started = 0;
+
+        for (ModuleHandle handle : getHandles()) {
+
+            ModuleDescriptor descriptor = handle.descriptor();
+            String moduleId = descriptor.id();
+            SemVersion version = descriptor.version();
+
+            SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
+
+            ModuleState state = handle.state();
+            if (state != ModuleState.LOADED && state != ModuleState.STOPPED) continue;
+
+            boolean success = false;
+            try {
+                start(simpleHandle);
+                success = true;
+                started++;
+
+                diagnosticsBuilder.append(ModuleStartDiagnostic.started(moduleId, version));
+
+            } catch (ContextStartException e) {
+                diagnosticsBuilder.append(ModuleStartDiagnostic.bootstrapFailed(moduleId));
+
+            } catch (MeshRegisterException e) {
+                diagnosticsBuilder.append(ModuleStartDiagnostic.contextNotStarted(moduleId));
+
+            } catch (ContextBuildException e) {
+                diagnosticsBuilder.append(ModuleStartDiagnostic.meshRegistrationFailed(moduleId));
+
+            } finally {
+                if (!success) handleModuleError(simpleHandle);
+
+            }
+
+        }
+
+        if (started > 0) {
+            diagnosticsBuilder.append(ModuleStartDiagnostic.startedN(started));
+
+        } else {
+            diagnosticsBuilder.append(ModuleStartDiagnostic.nothingStarted());
+
+        }
+
+        return diagnosticsBuilder.build();
+        
     }
 
 }

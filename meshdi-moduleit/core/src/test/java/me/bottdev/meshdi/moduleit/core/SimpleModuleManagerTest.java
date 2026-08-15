@@ -13,6 +13,7 @@ import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.kern.version.VersionRangeParser;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.moduleit.api.*;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
@@ -144,7 +145,7 @@ class SimpleModuleManagerTest {
             ModuleRepository badRepository = mock(ModuleRepository.class);
             when(badRepository.candidates()).thenReturn(List.of(candidate1, candidate2));
 
-            Diagnostics<ModuleDiagnostic> diagnostics = manager.load(badRepository);
+            Diagnostics<ModuleLoadDiagnostic> diagnostics = manager.load(badRepository);
 
             assertThat(manager.getHandles())
                     .hasSize(1)
@@ -153,7 +154,7 @@ class SimpleModuleManagerTest {
 
             assertTrue(diagnostics.has(DiagnosticType.WARN));
             assertThat(diagnostics)
-                    .contains(ModuleDiagnostic.duplicate("test"));
+                    .contains(ModuleLoadDiagnostic.duplicate("test"));
 
         }
 
@@ -169,8 +170,8 @@ class SimpleModuleManagerTest {
             ModuleRepository badRepository = mock(ModuleRepository.class);
             when(badRepository.candidates()).thenReturn(List.of(candidate));
 
-            Diagnostics<ModuleDiagnostic> diagnostics1 = manager.load(badRepository);
-            Diagnostics<ModuleDiagnostic> diagnostics2 = manager.load(badRepository);
+            Diagnostics<ModuleLoadDiagnostic> diagnostics1 = manager.load(badRepository);
+            Diagnostics<ModuleLoadDiagnostic> diagnostics2 = manager.load(badRepository);
 
             assertThat(manager.getHandles())
                     .hasSize(1)
@@ -181,7 +182,7 @@ class SimpleModuleManagerTest {
                     .hasSize(1);
 
             assertThat(diagnostics2)
-                    .contains(ModuleDiagnostic.alreadyLoaded("test"));
+                    .contains(ModuleLoadDiagnostic.alreadyLoaded("test"));
 
         }
 
@@ -198,13 +199,13 @@ class SimpleModuleManagerTest {
             ModuleRepository badRepository = mock(ModuleRepository.class);
             when(badRepository.candidates()).thenReturn(List.of(candidate));
 
-            Diagnostics<ModuleDiagnostic> diagnostics = manager.load(badRepository);
+            Diagnostics<ModuleLoadDiagnostic> diagnostics = manager.load(badRepository);
 
             assertThat(manager.getHandles())
                     .hasSize(0);
 
             assertThat(diagnostics)
-                    .contains(ModuleDiagnostic.apiVersionMismatch(
+                    .contains(ModuleLoadDiagnostic.apiVersionMismatch(
                             "test",
                             VersionRangeParser.parse(">2.0.0"),
                             SemVersionParser.parse("1.0.0")
@@ -230,14 +231,14 @@ class SimpleModuleManagerTest {
             ModuleRepository badRepository = mock(ModuleRepository.class);
             when(badRepository.candidates()).thenReturn(List.of(candidateA, candidateB));
 
-            Diagnostics<ModuleDiagnostic> diagnostics = manager.load(badRepository);
+            Diagnostics<ModuleLoadDiagnostic> diagnostics = manager.load(badRepository);
 
             assertThat(manager.getHandles())
                     .isEmpty();
 
             assertTrue(diagnostics.has(DiagnosticType.ERROR));
             assertThat(diagnostics)
-                    .contains(ModuleDiagnostic.badResolution(
+                    .contains(ModuleLoadDiagnostic.badResolution(
                             ListDiagnostics.<DependencyDiagnostic>builder()
                                     .append(DependencyDiagnostic.circular(new CyclePath<>("a", List.of("a", "b"))))
                                     .build()

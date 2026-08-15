@@ -1,4 +1,4 @@
-package me.bottdev.meshdi.moduleit.api;
+package me.bottdev.meshdi.moduleit.api.diagnostic;
 
 import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.Diagnostic;
@@ -8,24 +8,24 @@ import me.bottdev.kern.dependency.DependencyDiagnostic;
 import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
 
-/// A family of diagnostics related to module system.
-public sealed interface ModuleDiagnostic extends Diagnostic permits
-        ModuleDiagnostic.AlreadyLoaded,
-        ModuleDiagnostic.Duplicate,
-        ModuleDiagnostic.ApiVersionMismatch,
-        ModuleDiagnostic.BadResolution,
-        ModuleDiagnostic.Loaded
+/// Type of [ModuleDiagnostic] for loading of modules.
+public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
+        ModuleLoadDiagnostic.AlreadyLoaded,
+        ModuleLoadDiagnostic.Duplicate,
+        ModuleLoadDiagnostic.ApiVersionMismatch,
+        ModuleLoadDiagnostic.BadResolution,
+        ModuleLoadDiagnostic.Loaded
 {
 
-    static ModuleDiagnostic alreadyLoaded(@NonNull String id) {
+    static ModuleLoadDiagnostic alreadyLoaded(@NonNull String id) {
         return new AlreadyLoaded(id);
     }
 
-    static ModuleDiagnostic duplicate(@NonNull String id) {
+    static ModuleLoadDiagnostic duplicate(@NonNull String id) {
         return new Duplicate(id);
     }
 
-    static ModuleDiagnostic apiVersionMismatch(
+    static ModuleLoadDiagnostic apiVersionMismatch(
             @NonNull String id,
             @NonNull VersionRange range,
             @NonNull SemVersion actual
@@ -33,20 +33,20 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
         return new ApiVersionMismatch(id, range, actual);
     }
 
-    static ModuleDiagnostic badResolution(
+    static ModuleLoadDiagnostic badResolution(
             @NonNull Diagnostics<DependencyDiagnostic> diagnostics
     ) {
         return new BadResolution(diagnostics);
     }
 
-    static ModuleDiagnostic loaded(
+    static ModuleLoadDiagnostic loaded(
             @NonNull String id,
             @NonNull SemVersion version
     ) {
         return new Loaded(id, version);
     }
 
-    record AlreadyLoaded(String id) implements ModuleDiagnostic {
+    record AlreadyLoaded(String id) implements ModuleLoadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -60,7 +60,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
     }
 
-    record Duplicate(String id) implements ModuleDiagnostic {
+    record Duplicate(String id) implements ModuleLoadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -74,7 +74,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
     }
 
-    record ApiVersionMismatch(String id, VersionRange range, SemVersion actual) implements ModuleDiagnostic {
+    record ApiVersionMismatch(String id, VersionRange range, SemVersion actual) implements ModuleLoadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -88,7 +88,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
     }
 
-    record BadResolution(Diagnostics<DependencyDiagnostic> diagnostics) implements ModuleDiagnostic {
+    record BadResolution(Diagnostics<DependencyDiagnostic> diagnostics) implements ModuleLoadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -102,7 +102,7 @@ public sealed interface ModuleDiagnostic extends Diagnostic permits
 
     }
 
-    record Loaded(String id, SemVersion version) implements ModuleDiagnostic {
+    record Loaded(String id, SemVersion version) implements ModuleLoadDiagnostic {
 
         @Override
         public DiagnosticType type() {

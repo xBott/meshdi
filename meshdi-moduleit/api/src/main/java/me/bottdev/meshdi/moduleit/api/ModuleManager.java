@@ -1,8 +1,9 @@
 package me.bottdev.meshdi.moduleit.api;
 
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleLoadException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
 
 import java.util.List;
@@ -21,9 +22,13 @@ public interface ModuleManager {
     /// Loads modules from a provided repository.
     /// @throws CandidateListException when repository failed to list candidates.
     /// @return Diagnostics of loading process.
-    Diagnostics<ModuleDiagnostic> load(ModuleRepository repository) throws CandidateListException;
+    Diagnostics<ModuleLoadDiagnostic> load(ModuleRepository repository) throws CandidateListException;
 
     /// Starts specified module.
     void start(String id) throws ModuleStartException;
+
+    /// Starts all modules, that have not started yet.
+    /// @return Diagnostics of starting process.
+    Diagnostics<ModuleStartDiagnostic> startAll();
 
 }
