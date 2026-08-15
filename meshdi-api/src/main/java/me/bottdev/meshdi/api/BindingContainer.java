@@ -8,11 +8,11 @@ import java.util.List;
 
 public interface BindingContainer extends DependentContainer<TypedKey<?>, Binding<?>>, Disposable {
 
-    <T> boolean contains(TypedKey<T> key);
+    <T> boolean containsBinding(TypedKey<T> key);
 
-    <T> Binding<T> get(TypedKey<T> key);
+    <T> Binding<T> getBinding(TypedKey<T> key);
 
-    List<Binding<?>> getAll();
+    List<Binding<?>> getBindings();
 
     int size();
 

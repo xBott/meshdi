@@ -9,24 +9,18 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-public interface ContextMesh extends Disposable {
-
-    interface Registration {
-
-        ContextMesh submit() throws MeshRegisterException;
-
-    }
+public interface ContextMesh<R extends MeshRegistration> extends Disposable {
 
     boolean contains(String id);
 
-    Registration register(Context context) throws MeshRegisterException;
+    Context register(R registration) throws MeshRegisterException;
 
     MeshUnregisterCommand planUnregister(String id, MeshUnregisterStrategy strategy)
             throws MeshUnregisterPlanException;
 
-    Context get(String id);
+    R get(String id);
 
-    Optional<Context> find(String id);
+    Optional<R> find(String id);
 
     Set<String> getVisibleContexts(String id);
 

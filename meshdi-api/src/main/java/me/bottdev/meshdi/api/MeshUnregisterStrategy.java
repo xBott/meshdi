@@ -7,7 +7,7 @@ import java.util.function.Consumer;
 public interface MeshUnregisterStrategy {
 
     MeshUnregisterCommand createCommand(
-            ContextMesh mesh,
+            ContextMesh<?> mesh,
             String root,
             Consumer<String> unregisterHandler
     ) throws MeshUnregisterPlanException;

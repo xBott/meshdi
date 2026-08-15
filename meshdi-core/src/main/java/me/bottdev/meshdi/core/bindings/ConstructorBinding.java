@@ -7,11 +7,13 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.annotations.Dependency;
 import me.bottdev.meshdi.api.annotations.Inject;
 import me.bottdev.meshdi.api.exceptions.BeanConstructorException;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
+import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 
 import java.lang.reflect.Constructor;
@@ -29,6 +31,8 @@ public class ConstructorBinding<T> implements Binding<T> {
         private InitializationStrategy initializationStrategy = InitializationStrategy.LAZY;
         private ScopeType scopeType = ScopeType.SINGLETON;
         private Class<? extends T> implementation;
+        private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers =
+                new EnumMap<>(BeanLifecycleEventType.class);
 
         public Builder<T> init(InitializationStrategy initializationStrategy) {
             this.initializationStrategy = initializationStrategy;
@@ -58,6 +62,11 @@ public class ConstructorBinding<T> implements Binding<T> {
 
         public Builder<T> implementation(Class<? extends T> implementation) {
             this.implementation = implementation;
+            return this;
+        }
+
+        public ConstructorBinding.Builder<T> eventHandler(BeanLifecycleEventType type, BeanLifecycleEventHandler<T> handler) {
+            eventHandlers.put(type, handler);
             return this;
         }
 
@@ -109,7 +118,8 @@ public class ConstructorBinding<T> implements Binding<T> {
                         key,
                         initializationStrategy,
                         scopeType,
-                        constructor
+                        constructor,
+                        eventHandlers
                 );
 
             } catch (BeanConstructorException ex) {
@@ -131,6 +141,7 @@ public class ConstructorBinding<T> implements Binding<T> {
     @Getter private final InitializationStrategy initializationStrategy;
     @Getter private final ScopeType scopeType;
     private final Constructor<? extends T> constructor;
+    private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers;
 
     private final List<DependencyRequest<TypedKey<?>>> dependencies = new ArrayList<>();
 
@@ -138,16 +149,20 @@ public class ConstructorBinding<T> implements Binding<T> {
             TypedKey<T> key,
             InitializationStrategy initializationStrategy,
             ScopeType scopeType,
-            Constructor<? extends T> constructor
+            Constructor<? extends T> constructor,
+            Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers
     ) {
         Objects.requireNonNull(key, "Binding key must be non-null.");
         Objects.requireNonNull(scopeType, "Binding bean scope must be non-null.");
         Objects.requireNonNull(constructor, "Bean constructor must be non-null.");
+        Objects.requireNonNull(constructor, "Bean destroyer must be non-null.");
+        Objects.requireNonNull(eventHandlers, "Bean event handlers must be non-null.");
 
         this.key = key;
         this.initializationStrategy = initializationStrategy;
         this.scopeType = scopeType;
         this.constructor = constructor;
+        this.eventHandlers = Map.copyOf(eventHandlers);
 
         fetchDependenciesFromConstructor();
     }
@@ -155,7 +170,7 @@ public class ConstructorBinding<T> implements Binding<T> {
     private DependencyRequest<TypedKey<?>> getParameterDependencyRequest(Parameter parameter) {
         Class<?> type = parameter.getType();
         if (!parameter.isAnnotationPresent(Dependency.class))
-            return new DependencyRequest<>(SimpleTypedKey.of(type), DependencyLink.REQUIRED, DependOrder.AFTER);
+            return new SimpleDependencyRequest<>(SimpleTypedKey.of(type), DependencyLink.REQUIRED, DependOrder.AFTER);
 
         Dependency dependency = parameter.getAnnotation(Dependency.class);
         String qualifier = dependency.qualifier();
@@ -165,7 +180,7 @@ public class ConstructorBinding<T> implements Binding<T> {
                 SimpleTypedKey.of(type) :
                 SimpleTypedKey.of(type, qualifier);
 
-        return new DependencyRequest<>(key, link, order);
+        return new SimpleDependencyRequest<>(key, link, order);
     }
 
     private void fetchDependenciesFromConstructor() {
@@ -197,6 +212,19 @@ public class ConstructorBinding<T> implements Binding<T> {
 
         } catch (IllegalAccessException ex) {
             throw new BeanCreationException("Constructor of a bean is not accessible.", ex);
+
+        }
+    }
+
+    @Override
+    public void invokeEventHandler(BeanLifecycleEventType type, T bean) throws BeanLifecycleEventHandleException {
+        try {
+            BeanLifecycleEventHandler<T> handler = eventHandlers.get(type);
+            if (handler == null) return;
+            handler.handle(bean);
+
+        } catch (Exception ex) {
+            throw new BeanLifecycleEventHandleException("Failed to invoke destroyer.", ex);
 
         }
     }

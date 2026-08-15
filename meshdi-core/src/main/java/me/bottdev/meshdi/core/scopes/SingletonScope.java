@@ -1,6 +1,7 @@
 package me.bottdev.meshdi.core.scopes;
 
 import me.bottdev.kern.commons.key.TypedKey;
+import me.bottdev.meshdi.api.BeanInstance;
 import me.bottdev.meshdi.api.BeanResolver;
 import me.bottdev.meshdi.api.BeanScope;
 import me.bottdev.meshdi.api.Binding;
@@ -13,15 +14,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SingletonScope implements BeanScope {
 
-    private final Map<TypedKey<?>, Object> singletons = new ConcurrentHashMap<>();
+    private final Map<TypedKey<?>, BeanInstance<?>> singletons = new ConcurrentHashMap<>();
     private final Deque<TypedKey<?>> creationOrder = new ConcurrentLinkedDeque<>();
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
     @Override
-    public List<Object> getDestroyOrder() {
-        List<Object> destroyList = new ArrayList<>();
+    public List<BeanInstance<?>> getDestroyOrder() {
+        List<BeanInstance<?>> destroyList = new ArrayList<>();
 
-        Iterator<TypedKey<?>> it = creationOrder.descendingIterator();
+        Iterator<TypedKey<?>> it = creationOrder.iterator();
         while (it.hasNext()) {
             destroyList.add(singletons.get(it.next()));
         }
@@ -36,8 +37,8 @@ public class SingletonScope implements BeanScope {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T> T get(TypedKey<T> key) {
-        return (T) singletons.get(key);
+    public <T> BeanInstance<T> get(TypedKey<T> key) {
+        return (BeanInstance<T>) singletons.get(key);
     }
 
     @Override
@@ -54,7 +55,9 @@ public class SingletonScope implements BeanScope {
                 throw new BeanCreationException("Singleton " + key + " is already created");
 
             T value = binding.create(resolver);
-            singletons.put(key, value);
+            BeanInstance<T> instance = new BeanInstance<>(binding, value);
+
+            singletons.put(key, instance);
             creationOrder.push(key);
 
             return value;

@@ -41,7 +41,7 @@ public abstract class AbstractContext implements Context {
     }
 
     protected void initializeEagerBindings() throws BeanLifecycleException {
-        for (Binding<?> binding : getBindingContainer().getAll()) {
+        for (Binding<?> binding : getBindingContainer().getBindings()) {
             if (binding.getInitializationStrategy() != InitializationStrategy.EAGER) continue;
             getLifecycleManager().getOrCreate(binding, getResolver());
         }

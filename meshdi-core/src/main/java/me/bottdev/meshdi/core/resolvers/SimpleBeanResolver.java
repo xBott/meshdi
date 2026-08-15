@@ -19,14 +19,14 @@ public class SimpleBeanResolver implements BeanResolver {
 
     @Override
     public <T> boolean contains(TypedKey<T> key) {
-        return bindingContainer.contains(key);
+        return bindingContainer.containsBinding(key);
     }
 
     @Override
     public <T> T get(TypedKey<T> key) {
 
-        if (!bindingContainer.contains(key)) return null;
-        Binding<T> binding = bindingContainer.get(key);
+        if (!bindingContainer.containsBinding(key)) return null;
+        Binding<T> binding = bindingContainer.getBinding(key);
 
         try {
             return lifecycleManager.getOrCreate(binding, this);
@@ -41,8 +41,8 @@ public class SimpleBeanResolver implements BeanResolver {
     @Override
     public <T> Optional<T> find(TypedKey<T> key) {
 
-        if (!bindingContainer.contains(key)) return null;
-        Binding<T> binding = bindingContainer.get(key);
+        if (!bindingContainer.containsBinding(key)) return null;
+        Binding<T> binding = bindingContainer.getBinding(key);
 
         try {
             return Optional.of(lifecycleManager.getOrCreate(binding, this));
@@ -55,7 +55,7 @@ public class SimpleBeanResolver implements BeanResolver {
 
     @Override
     public <T> Binding<T> getBinding(TypedKey<T> key) {
-        return bindingContainer.get(key);
+        return bindingContainer.getBinding(key);
     }
 
 }

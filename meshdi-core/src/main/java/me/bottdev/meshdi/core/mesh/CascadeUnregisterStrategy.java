@@ -14,7 +14,7 @@ public class CascadeUnregisterStrategy implements MeshUnregisterStrategy {
 
     @Override
     public MeshUnregisterCommand createCommand(
-            ContextMesh mesh,
+            ContextMesh<?> mesh,
             String root,
             Consumer<String> unregisterHandler
     ) {
@@ -29,7 +29,7 @@ public class CascadeUnregisterStrategy implements MeshUnregisterStrategy {
     }
 
     private void collectRecursive(
-            ContextMesh mesh,
+            ContextMesh<?> mesh,
             String current,
             Set<String> visited,
             List<String> order

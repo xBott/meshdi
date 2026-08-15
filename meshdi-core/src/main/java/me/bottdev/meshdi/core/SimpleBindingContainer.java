@@ -5,8 +5,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.Binding;
 import me.bottdev.meshdi.api.BindingContainer;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @RequiredArgsConstructor
@@ -16,13 +15,13 @@ public class SimpleBindingContainer implements BindingContainer {
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
     @Override
-    public <T> boolean contains(TypedKey<T> key) {
+    public <T> boolean containsBinding(TypedKey<T> key) {
         return bindings.containsKey(key);
     }
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> Binding<T> get(TypedKey<T> key) {
+    public <T> Binding<T> getBinding(TypedKey<T> key) {
         Binding<?> binding = bindings.get(key);
         if (binding == null) return null;
 
@@ -34,7 +33,7 @@ public class SimpleBindingContainer implements BindingContainer {
     }
 
     @Override
-    public List<Binding<?>> getAll() {
+    public List<Binding<?>> getBindings() {
         return List.copyOf(bindings.values());
     }
 
@@ -56,8 +55,32 @@ public class SimpleBindingContainer implements BindingContainer {
     }
 
     @Override
-    public List<Binding<?>> dependents() {
-        return getAll();
+    public boolean isEmpty() {
+        return bindings.isEmpty();
     }
 
+    @Override
+    public Set<TypedKey<?>> keys() {
+        return Collections.unmodifiableSet(bindings.keySet());
+    }
+
+    @Override
+    public Collection<Binding<?>> values() {
+        return Collections.unmodifiableCollection(bindings.values());
+    }
+
+    @Override
+    public boolean contains(TypedKey<?> typedKey) {
+        return containsBinding(typedKey);
+    }
+
+    @Override
+    public Binding<?> get(TypedKey<?> typedKey) {
+        return getBinding(typedKey);
+    }
+
+    @Override
+    public Map<TypedKey<?>, Binding<?>> toMap() {
+        return Map.copyOf(bindings);
+    }
 }

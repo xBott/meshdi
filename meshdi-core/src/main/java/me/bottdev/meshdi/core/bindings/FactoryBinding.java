@@ -6,14 +6,13 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
+import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
+import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class FactoryBinding<T> implements Binding<T> {
 
@@ -26,6 +25,8 @@ public class FactoryBinding<T> implements Binding<T> {
         private ScopeType scopeType = ScopeType.SINGLETON;
         private BeanFactory<T> factory = null;
         private final List<DependencyRequest<TypedKey<?>>> dependencies = new ArrayList<>();
+        private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers =
+                new EnumMap<>(BeanLifecycleEventType.class);
 
         public Builder<T> init(InitializationStrategy initializationStrategy) {
            this.initializationStrategy = initializationStrategy;
@@ -58,12 +59,17 @@ public class FactoryBinding<T> implements Binding<T> {
             return this;
         }
 
+        public Builder<T> eventHandler(BeanLifecycleEventType type, BeanLifecycleEventHandler<T> handler) {
+            eventHandlers.put(type, handler);
+            return this;
+        }
+
         public Builder<T> dependsOn(
                 TypedKey<?> dependencyKey,
                 DependencyLink link,
                 DependOrder order
         ) {
-            dependencies.add(new DependencyRequest<>(dependencyKey, link, order));
+            dependencies.add(new SimpleDependencyRequest<>(dependencyKey, link, order));
             return this;
         }
 
@@ -77,7 +83,8 @@ public class FactoryBinding<T> implements Binding<T> {
                         initializationStrategy,
                         scopeType,
                         factory,
-                        dependencies
+                        dependencies,
+                        eventHandlers
                 );
 
             } catch (Exception ex) {
@@ -96,25 +103,29 @@ public class FactoryBinding<T> implements Binding<T> {
     @Getter private final InitializationStrategy initializationStrategy;
     @Getter private final ScopeType scopeType;
     private final BeanFactory<T> factory;
-
     private final List<DependencyRequest<TypedKey<?>>> dependencies;
+    private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers;
 
     public FactoryBinding(
             TypedKey<T> key,
             InitializationStrategy initializationStrategy,
             ScopeType scopeType,
             BeanFactory<T> factory,
-            List<DependencyRequest<TypedKey<?>>> dependencies
+            List<DependencyRequest<TypedKey<?>>> dependencies,
+            Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers
     ) {
         Objects.requireNonNull(key, "Binding key must be non-null.");
         Objects.requireNonNull(scopeType, "Binding bean scope must be non-null.");
         Objects.requireNonNull(factory, "Binding bean factory must be non-null.");
+        Objects.requireNonNull(dependencies, "Bean dependencies must be non-null.");
+        Objects.requireNonNull(eventHandlers, "Bean event handlers must be non-null.");
 
         this.key = key;
         this.initializationStrategy = initializationStrategy;
         this.scopeType = scopeType;
         this.factory = factory;
-        this.dependencies = dependencies;
+        this.dependencies = Collections.unmodifiableList(dependencies);
+        this.eventHandlers = Map.copyOf(eventHandlers);
     }
 
     @Override
@@ -125,6 +136,19 @@ public class FactoryBinding<T> implements Binding<T> {
     @Override
     public T create(BeanResolver resolver) throws BeanCreationException {
         return factory.create(resolver);
+    }
+
+    @Override
+    public void invokeEventHandler(BeanLifecycleEventType type, T bean) throws BeanLifecycleEventHandleException {
+        try {
+            BeanLifecycleEventHandler<T> handler = eventHandlers.get(type);
+            if (handler == null) return;
+            handler.handle(bean);
+
+        } catch (Exception ex) {
+            throw new BeanLifecycleEventHandleException("Failed to invoke event hadnler.", ex);
+
+        }
     }
 
 }

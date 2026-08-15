@@ -1,9 +1,12 @@
 package me.bottdev.meshdi.core.builders;
 
 import me.bottdev.kern.commons.key.TypedKey;
+import me.bottdev.kern.commons.registry.Registry;
+import me.bottdev.kern.commons.registry.types.SimpleRegistry;
 import me.bottdev.kern.dependency.DependencyResolver;
-import me.bottdev.kern.dependency.exceptions.DependencyException;
 import me.bottdev.kern.dependency.graph.GraphDependencyResolver;
+import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
+import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
@@ -13,8 +16,11 @@ import me.bottdev.meshdi.core.bindings.ConstructorBinding;
 import me.bottdev.meshdi.core.bindings.FactoryBinding;
 import me.bottdev.meshdi.core.context.SimpleContext;
 import me.bottdev.meshdi.core.resolvers.SimpleBeanResolver;
+import me.bottdev.meshdi.core.scopes.PrototypeScope;
+import me.bottdev.meshdi.core.scopes.SingletonScope;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -22,7 +28,7 @@ import java.util.function.Function;
 
 public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
 
-    //private DependencyResolver dependencyResolver = new GraphDependencyResolver();
+    private static final DependencyResolver dependencyResolver = new GraphDependencyResolver(new KahnSorter(new SimpleCycleDetector()));
 
     private String id;
     private Map<TypedKey<?>, BindingBuilder<?>> bindingBuilders;
@@ -30,11 +36,10 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
 
     public SimpleContextBuilder() {
         this.bindingBuilders = new HashMap<>();
-
-//        Registry<ScopeType, BeanScope> scopeRegistry = new SimpleRegistry<>();
-//        scopeRegistry.register(ScopeType.SINGLETON, new SingletonScope());
-//        scopeRegistry.register(ScopeType.PROTOTYPE, new PrototypeScope());
-        this.lifecycleManager = new SimpleBeanLifecycleManager();
+        Registry<ScopeType, BeanScope> scopeRegistry = new SimpleRegistry<>();
+        scopeRegistry.register(ScopeType.SINGLETON, new SingletonScope());
+        scopeRegistry.register(ScopeType.PROTOTYPE, new PrototypeScope());
+        this.lifecycleManager = new SimpleBeanLifecycleManager(scopeRegistry);
     }
 
     public SimpleContextBuilder id(String id) {
@@ -73,7 +78,7 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
             Objects.requireNonNull(lifecycleManager, "Context Lifecycle Manager must be non-null.");
             if (id.isBlank()) throw new IllegalArgumentException("Context Id must be non-blank.");
 
-            Map<TypedKey<?>, Binding<?>> bindings = new HashMap<>();
+            Map<TypedKey<?>, Binding<?>> bindings = new LinkedHashMap<>();
 
             for (BindingBuilder<?> bindingBuilder : bindingBuilders.values()) {
                 TypedKey<?> key = bindingBuilder.getKey();
@@ -82,16 +87,13 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
             }
 
             BindingContainer bindingContainer = new SimpleBindingContainer(bindings);
-            //dependencyResolver.resolve(bindingContainer);
+            dependencyResolver.resolve(bindingContainer);
 
             BeanResolver resolver = resolverFactory.apply(bindingContainer);
             return new SimpleContext(id, bindingContainer, lifecycleManager, resolver);
 
         } catch (BindingBuildException ex) {
             throw new ContextBuildException("Failed to create binding.", ex);
-
-//        } catch (DependencyException ex) {
-//            throw new ContextBuildException("Failed to resolve context dependencies.", ex);
 
         } catch (Exception ex) {
             throw new ContextBuildException("Failed to build a context.", ex);
