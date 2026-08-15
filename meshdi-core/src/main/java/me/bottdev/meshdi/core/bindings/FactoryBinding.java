@@ -146,7 +146,7 @@ public class FactoryBinding<T> implements Binding<T> {
             handler.handle(bean);
 
         } catch (Exception ex) {
-            throw new BeanLifecycleEventHandleException("Failed to invoke destroyer.", ex);
+            throw new BeanLifecycleEventHandleException("Failed to invoke event hadnler.", ex);
 
         }
     }
