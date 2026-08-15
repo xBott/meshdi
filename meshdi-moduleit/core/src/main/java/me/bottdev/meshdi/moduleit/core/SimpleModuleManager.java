@@ -24,6 +24,7 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
+import me.bottdev.meshdi.moduleit.api.exceptions.RequireDependencyException;
 
 import java.util.*;
 
@@ -63,6 +64,18 @@ public class SimpleModuleManager implements ModuleManager {
     @Override
     public ModuleHandle getHandle(String id) {
         return handles.get(id);
+    }
+
+    @Override
+    public List<ModuleHandle> getDependencyHandles(String id) {
+        ModuleHandle handle = getHandle(id);
+        if (handle == null) return List.of();
+        return handle.descriptor().getVersionedDependencies().stream()
+                .map(request -> {
+                    String key = request.key();
+                    return getHandle(key);
+                })
+                .toList();
     }
 
     private Collection<ModuleCandidate> prepareCandidates(
@@ -175,11 +188,25 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     private void start(SimpleModuleHandle handle) throws
+            RequireDependencyException,
             IllegalStateException,
             ContextBuildException,
             ContextStartException,
             MeshRegisterException
     {
+
+        ModuleDescriptor descriptor = handle.descriptor();
+        List<ModuleHandle> dependencyHandles = getDependencyHandles(descriptor.id());
+        boolean dependenciesStarted = dependencyHandles.stream()
+                .allMatch(dependency -> dependency.state() == ModuleState.STARTED);
+
+        if (!dependenciesStarted) {
+            List<ModuleHandle> notStartedDependencies = dependencyHandles.stream()
+                    .filter(dependency -> dependency.state() != ModuleState.STARTED)
+                    .toList();
+
+            throw new RequireDependencyException("Not all dependencies have started.", notStartedDependencies);
+        }
 
         ModuleState currentState = handle.state();
         if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED)
@@ -187,7 +214,6 @@ public class SimpleModuleManager implements ModuleManager {
 
         handle.setState(ModuleState.STARTING);
 
-        ModuleDescriptor descriptor = handle.descriptor();
 
         Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
                 .id(descriptor.id())
@@ -218,6 +244,9 @@ public class SimpleModuleManager implements ModuleManager {
         try {
             start(simpleHandle);
             success = true;
+
+        } catch (RequireDependencyException ex) {
+            throw new ModuleStartException("Module requires all its dependencies to be started.", ex);
 
         } catch (IllegalStateException ex) {
             throw new ModuleStartException("Starting module from incorrect state.", ex);
@@ -265,13 +294,16 @@ public class SimpleModuleManager implements ModuleManager {
 
                 diagnosticsBuilder.append(ModuleStartDiagnostic.started(moduleId, version));
 
-            } catch (ContextStartException e) {
+            } catch (RequireDependencyException ex) {
+                diagnosticsBuilder.append(ModuleStartDiagnostic.requireDependencies(moduleId, ex.getDependencyHandles()));
+
+            } catch (ContextStartException ex) {
                 diagnosticsBuilder.append(ModuleStartDiagnostic.bootstrapFailed(moduleId));
 
-            } catch (MeshRegisterException e) {
+            } catch (MeshRegisterException ex) {
                 diagnosticsBuilder.append(ModuleStartDiagnostic.contextNotStarted(moduleId));
 
-            } catch (ContextBuildException e) {
+            } catch (ContextBuildException ex) {
                 diagnosticsBuilder.append(ModuleStartDiagnostic.meshRegistrationFailed(moduleId));
 
             } finally {

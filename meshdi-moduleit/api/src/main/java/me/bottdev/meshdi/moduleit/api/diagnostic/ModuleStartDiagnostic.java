@@ -4,9 +4,13 @@ import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.Diagnostic;
 import me.bottdev.kern.commons.diagnostic.DiagnosticType;
 import me.bottdev.kern.version.SemVersion;
+import me.bottdev.meshdi.moduleit.api.ModuleHandle;
+
+import java.util.List;
 
 /// Type of [ModuleDiagnostic] for starting of modules.
 public sealed interface ModuleStartDiagnostic extends Diagnostic permits
+        ModuleStartDiagnostic.RequireDependencies,
         ModuleStartDiagnostic.BootstrapFailed,
         ModuleStartDiagnostic.ContextNotStarted,
         ModuleStartDiagnostic.MeshRegistrationFailed,
@@ -14,6 +18,13 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
         ModuleStartDiagnostic.StartedN,
         ModuleStartDiagnostic.NothingStarted
 {
+
+    static ModuleStartDiagnostic requireDependencies(
+            @NonNull String id,
+            @NonNull List<ModuleHandle> dependencyHandles
+    ) {
+        return new RequireDependencies(id, dependencyHandles.stream().map(handle -> handle.descriptor().id()).toList());
+    }
 
     static ModuleStartDiagnostic bootstrapFailed(
             @NonNull String id
@@ -48,6 +59,20 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
 
     static ModuleStartDiagnostic nothingStarted() {
         return new NothingStarted();
+    }
+
+    record RequireDependencies(String id, List<String> dependencyIds) implements ModuleStartDiagnostic {
+
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.ERROR;
+        }
+
+        @Override
+        public String message() {
+            return "Module \"" + id + "\" requires all its dependencies to be started: " + String.join(", ", dependencyIds);
+        }
+
     }
 
     record BootstrapFailed(String id) implements ModuleStartDiagnostic {

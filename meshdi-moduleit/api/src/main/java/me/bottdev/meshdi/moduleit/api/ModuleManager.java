@@ -19,6 +19,9 @@ public interface ModuleManager {
 
     ModuleHandle getHandle(String id);
 
+    /// @return A list of module handles specified module depends on.
+    List<ModuleHandle> getDependencyHandles(String id);
+
     /// Loads modules from a provided repository.
     /// @throws CandidateListException when repository failed to list candidates.
     /// @return Diagnostics of loading process.
