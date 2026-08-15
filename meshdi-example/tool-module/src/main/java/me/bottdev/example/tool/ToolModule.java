@@ -14,7 +14,7 @@ import me.bottdev.meshdi.moduleit.api.annotations.Module;
 @Module(
         id = "tool",
         version = "0.0.1",
-        apiVersion = ">=0.0.1",
+        apiVersion = ">=1.0.0",
         dependencies = {
                 @DependsOn(id = "root")
         }
