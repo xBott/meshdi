@@ -6,7 +6,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegistrationBuildException;
-import me.bottdev.meshdi.api.exceptions.mesh.MeshUnregisterPlanException;
+import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
 import me.bottdev.meshdi.core.context.MeshViewContext;
 import me.bottdev.meshdi.core.mesh.views.KernContextGraphView;
 import me.bottdev.meshdi.core.resolvers.MeshBeanResolver;
@@ -113,13 +113,15 @@ public class DagContextMesh implements ContextMesh<DagContextMesh.DagMeshRegistr
     }
 
     @Override
-    public MeshUnregisterCommand planUnregister(String id, MeshUnregisterStrategy strategy)
-            throws MeshUnregisterPlanException
+    public MeshUnregisterCommand planUnregister(String id, MeshContextSelectionStrategy strategy)
+            throws MeshContextSelectionException
     {
         if (!contains(id))
-            throw new MeshUnregisterPlanException("Context \"" + id + "\" does not exist in a mesh.");
+            throw new MeshContextSelectionException("Context \"" + id + "\" does not exist in a mesh.");
 
-        return strategy.createCommand(this, id, contextId -> {
+        List<String> contextIds = strategy.select(id, this);
+
+        return new MeshUnregisterCommand(contextIds, contextId -> {
             graphView.removeNode(contextId);
             registered.remove(contextId);
             invalidateCache();
@@ -129,6 +131,13 @@ public class DagContextMesh implements ContextMesh<DagContextMesh.DagMeshRegistr
     @Override
     public DagMeshRegistration get(String id) {
         return registered.get(id);
+    }
+
+    @Override
+    public List<Context> getContexts() {
+        return registered.values().stream()
+                .map(DagMeshRegistration::context)
+                .toList();
     }
 
     @Override

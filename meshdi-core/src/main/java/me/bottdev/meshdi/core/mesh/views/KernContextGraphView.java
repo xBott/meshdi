@@ -23,7 +23,7 @@ public class KernContextGraphView implements ContextGraphView {
 
     @Override
     public void removeNode(String id) {
-
+        graph.removeNode(id);
     }
 
     @Override
