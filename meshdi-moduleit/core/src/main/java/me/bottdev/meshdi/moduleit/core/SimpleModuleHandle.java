@@ -11,7 +11,8 @@ import me.bottdev.meshdi.moduleit.api.ModuleState;
 public class SimpleModuleHandle implements ModuleHandle {
 
     private final ModuleCandidate candidate;
-    private final ClassLoader classLoader;
+    @Setter
+    private ClassLoader classLoader;
     @Setter
     private ModuleState state = ModuleState.LOADED;
     @Setter
