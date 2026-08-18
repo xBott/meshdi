@@ -16,6 +16,7 @@ import me.bottdev.meshdi.moduleit.api.*;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
+import me.bottdev.meshdi.moduleit.api.exceptions.RequireDependencyException;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
 import me.bottdev.meshdi.moduleit.core.utils.TestModuleCandidate;
 import me.bottdev.meshdi.moduleit.core.utils.TestModuleDescriptor;
@@ -58,7 +59,9 @@ class SimpleModuleManagerTest {
                 new SimpleModuleExportRegistry()
         );
 
-        manager = new SimpleModuleManager(dependencyResolver, loadEnvironment);
+        ModuleClassLoaderLeakDetector leakDetector = new AsyncModuleClassLoaderLeakDetector();
+
+        manager = new SimpleModuleManager(dependencyResolver, loadEnvironment, leakDetector);
     }
 
     @Nested
@@ -240,7 +243,7 @@ class SimpleModuleManagerTest {
             assertThat(diagnostics)
                     .contains(ModuleLoadDiagnostic.badResolution(
                             ListDiagnostics.<DependencyDiagnostic>builder()
-                                    .append(DependencyDiagnostic.circular(new CyclePath<>("a", List.of("a", "b"))))
+                                    .append(DependencyDiagnostic.circular(new CyclePath<>(List.of("a", "b", "a"))))
                                     .build()
                     ));
 
@@ -365,17 +368,56 @@ class SimpleModuleManagerTest {
         }
 
         @Test
+        @DisplayName("start: module requires its dependency to be started")
+        void start_requireDependencyStarted() throws IOException, CandidateListException {
+
+            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
+                    .withSource("com.test.RootModule", """
+                        package com.test;
+                        
+                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
+                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
+                        
+                        @Module(id = "root", version = "0.0.1", apiVersion = ">=1.0.0")
+                        public class RootModule {}
+                        """
+                    )
+                    .buildTo(repoDir, "root-module-0.0.1.jar");
+
+            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
+                    .withSource("com.test.HologramModule", """
+                        package com.test;
+                        
+                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
+                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
+                        
+                        @Module(id = "hologram", version = "0.0.1", apiVersion = ">=1.0.0",
+                        dependencies = { @DependsOn(id = "root", version = ">=0.0.1") })
+                        public class HologramModule {}
+                        """
+                    )
+                    .buildTo(repoDir, "holograms-module-0.0.1.jar");
+
+            manager.load(repository);
+            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> manager.start("hologram"));
+            assertThat(ex)
+                    .hasCauseInstanceOf(RequireDependencyException.class)
+                    .hasMessageContaining("requires all its dependencies");
+
+        }
+
+        @Test
         @DisplayName("start: module does not exist")
         void start_nonExisting() {
 
-            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> manager.start("root"));
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> manager.start("root"));
             assertThat(ex)
                     .hasMessageContaining("root")
                     .hasMessageContaining("does not exist");
 
         }
 
-        @EnumSource(value = ModuleState.class, names = { "STARTING", "STARTED", "FAILED", "RESTARTING", "STOPPING" })
+        @EnumSource(value = ModuleState.class, names = { "STARTING", "STARTED", "START_FAILED", "RESTARTING", "STOPPING" })
         @ParameterizedTest
         @DisplayName("start: incorrect module start")
         void start_incorrectState(ModuleState state) {
@@ -389,9 +431,7 @@ class SimpleModuleManagerTest {
 
             ModuleStartException ex = assertThrows(ModuleStartException.class, () -> spyManager.start("root"));
             assertThat(ex)
-                    .hasMessageContaining("Required LOADED or STOPPED state")
-                    .hasMessageContaining("Actual: " + state);
-
+                    .hasMessageContaining("Starting module from incorrect state");
         }
 
     }
