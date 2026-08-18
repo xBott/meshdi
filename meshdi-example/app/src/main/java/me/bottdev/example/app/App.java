@@ -9,11 +9,12 @@ import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.meshdi.moduleit.api.*;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
-import me.bottdev.meshdi.moduleit.core.SimpleModuleExportRegistry;
-import me.bottdev.meshdi.moduleit.core.SimpleModuleLoadEnvironment;
-import me.bottdev.meshdi.moduleit.core.SimpleModuleManager;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStopException;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleUnloadException;
+import me.bottdev.meshdi.moduleit.core.*;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
 
 import java.nio.file.Path;
@@ -21,24 +22,32 @@ import java.util.Set;
 
 public class App {
 
-    public static void main(String[] args) throws CandidateListException, ModuleStartException {
+    public static void main(String[] args) throws
+            CandidateListException,
+            ModuleStopException,
+            InterruptedException,
+            ModuleUnloadException
+    {
 
         String pathStr = args[0];
         if (pathStr == null) throw new IllegalArgumentException("repository path must be valid");
 
         StatefulDependencyResolver<String, ModuleCandidate> resolver =
                 new GraphStatefulVersionedDependencyResolver<>(new KahnSorter(new SimpleCycleDetector()));
-        ModuleLoadEnvironment loadEnvironment = new SimpleModuleLoadEnvironment(
-                SemVersionParser.parse("1.0.0"),
-                App.class.getClassLoader(),
-                Set.of(
+
+        ModuleLoadEnvironment loadEnvironment = SimpleModuleLoadEnvironment.builder()
+                .apiVersion(SemVersionParser.parse("1.0.0"))
+                .apiLoader(App.class.getClassLoader())
+                .apiPackages(Set.of(
                         "me.bottdev.meshdi",
                         "me.bottdev.kern"
-                ),
-                new SimpleModuleExportRegistry()
-        );
+                ))
+                .exportRegistry(new SimpleModuleExportRegistry())
+                .build();
 
-        ModuleManager manager = new SimpleModuleManager(resolver, loadEnvironment);
+        ModuleClassLoaderLeakDetector leakDetector = new AsyncModuleClassLoaderLeakDetector();
+
+        ModuleManager manager = new SimpleModuleManager(resolver, loadEnvironment, leakDetector);
         ModuleRepository repository = new LocalModuleRepository(Path.of(pathStr));
 
         Diagnostics<ModuleLoadDiagnostic> loadDiagnostics = manager.load(repository);
@@ -46,6 +55,23 @@ public class App {
 
         Diagnostics<ModuleStartDiagnostic> startDiagnostics = manager.startAll();
         System.out.println(startDiagnostics);
+
+        Diagnostics<ModuleStopDiagnostic> stopDiagnostics = manager.stop("root", ModuleSelectionStrategies.CASCADE).confirm();
+        System.out.println(stopDiagnostics);
+
+        ModuleUnloadResult unloadResult = manager.unload("root", ModuleSelectionStrategies.CASCADE).confirm();
+        Diagnostics<ModuleUnloadDiagnostic> unloadDiagnostics = unloadResult.diagnostics();
+        System.out.println(unloadDiagnostics);
+
+        unloadResult.gc().thenAccept(list -> list.forEach(report -> {
+            switch (report) {
+                case ModuleUnloadGCReport.NotUnloaded notUnloaded -> System.out.println("Module is not unloaded: " + notUnloaded.id());
+                case ModuleUnloadGCReport.Success success -> System.out.println("Module is unloaded successfully: " + success.id());
+                case ModuleUnloadGCReport.Leaked leaked -> System.out.println("Module is leaked: " + leaked.id() + ", " + leaked.error().getMessage());
+            }
+        }));
+
+        Thread.sleep(10_000);
 
     }
 

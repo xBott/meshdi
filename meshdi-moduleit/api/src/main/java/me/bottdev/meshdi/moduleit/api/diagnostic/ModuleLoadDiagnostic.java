@@ -1,7 +1,6 @@
 package me.bottdev.meshdi.moduleit.api.diagnostic;
 
 import lombok.NonNull;
-import me.bottdev.kern.commons.diagnostic.Diagnostic;
 import me.bottdev.kern.commons.diagnostic.DiagnosticType;
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
 import me.bottdev.kern.dependency.DependencyDiagnostic;

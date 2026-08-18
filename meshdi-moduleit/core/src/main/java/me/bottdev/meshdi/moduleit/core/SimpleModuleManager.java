@@ -10,43 +10,59 @@ import me.bottdev.kern.dependency.DependentContainer;
 import me.bottdev.kern.dependency.ResolutionResult;
 import me.bottdev.kern.dependency.StatefulDependencyResolver;
 import me.bottdev.kern.dependency.containers.SimpleDependentContainer;
+import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextStartException;
+import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
+import me.bottdev.meshdi.api.exceptions.mesh.MeshUnregisterExecuteException;
 import me.bottdev.meshdi.core.SimpleContextBootstrap;
 import me.bottdev.meshdi.core.mesh.DagContextMesh;
+import me.bottdev.meshdi.core.mesh.MeshContextSelectionStrategies;
 import me.bottdev.meshdi.moduleit.api.*;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
-import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
-import me.bottdev.meshdi.moduleit.api.exceptions.RequireDependencyException;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.exceptions.*;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 public class SimpleModuleManager implements ModuleManager {
 
     private final StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver;
-    private final ModuleLoadEnvironment loadEnvironment;
+    private final ModuleLoadEnvironment environment;
+    private final ModuleClassLoaderLeakDetector leakDetector;
+
     private final Map<String, SimpleModuleHandle> handles = new LinkedHashMap<>();
     private final DagContextMesh contextMesh = new DagContextMesh();
 
     public SimpleModuleManager(
             @NonNull StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver,
-            @NonNull ModuleLoadEnvironment loadEnvironment
+            @NonNull ModuleLoadEnvironment environment,
+            @NonNull ModuleClassLoaderLeakDetector leakDetector
     ) {
         this.dependencyResolver = dependencyResolver;
-        this.loadEnvironment = loadEnvironment;
+        this.environment = environment;
+        this.leakDetector = leakDetector;
     }
 
 
     @Override
-    public ModuleLoadEnvironment loadEnvironment() {
-        return loadEnvironment;
+    public ModuleLoadEnvironment environment() {
+        return environment;
+    }
+
+    @Override
+    public ModuleClassLoaderLeakDetector leakDetector() {
+        return leakDetector;
     }
 
     @Override
@@ -68,13 +84,17 @@ public class SimpleModuleManager implements ModuleManager {
 
     @Override
     public List<ModuleHandle> getDependencyHandles(String id) {
-        ModuleHandle handle = getHandle(id);
-        if (handle == null) return List.of();
-        return handle.descriptor().getVersionedDependencies().stream()
-                .map(request -> {
-                    String key = request.key();
-                    return getHandle(key);
-                })
+        if (!exists(id)) return List.of();
+        return dependencyResolver.state().dependenciesOf(id).stream()
+                .map(this::getHandle)
+                .toList();
+    }
+
+    @Override
+    public List<ModuleHandle> getDependentHandles(String id) {
+        if (!exists(id)) return List.of();
+        return dependencyResolver.state().dependentsOf(id).stream()
+                .map(this::getHandle)
                 .toList();
     }
 
@@ -101,11 +121,11 @@ public class SimpleModuleManager implements ModuleManager {
                 continue;
             }
 
-            if (!requiredApiVersion.satisfies(loadEnvironment.apiVersion())) {
+            if (!requiredApiVersion.satisfies(environment.apiVersion())) {
                 diagnosticsBuilder.append(ModuleLoadDiagnostic.apiVersionMismatch(
                         moduleId,
                         requiredApiVersion,
-                        loadEnvironment.apiVersion())
+                        environment.apiVersion())
                 );
                 continue;
             }
@@ -167,11 +187,11 @@ public class SimpleModuleManager implements ModuleManager {
                     .toList();
             Set<String> exports = descriptor.exports();
 
-            ClassLoader classLoader = candidate.openClassLoader(loadEnvironment, dependencyIds);
+            ClassLoader classLoader = candidate.openClassLoader(environment, dependencyIds);
             SimpleModuleHandle handle = new SimpleModuleHandle(candidate, classLoader);
 
             handles.put(moduleId, handle);
-            loadEnvironment.exportRegistry().register(moduleId, exports, classLoader);
+            environment.exportRegistry().register(moduleId, exports, classLoader);
 
             diagnosticsBuilder.append(ModuleLoadDiagnostic.loaded(moduleId, version));
 
@@ -181,19 +201,24 @@ public class SimpleModuleManager implements ModuleManager {
 
     }
 
-    private void handleModuleError(SimpleModuleHandle handle) {
-        if (!handle.state().isIntermediate()) return;
-        handle.setContext(null);
-        handle.setState(ModuleState.FAILED);
+    private void handleStartError(ModuleHandle handle) {
+        if (handle instanceof SimpleModuleHandle simpleHandle) {
+            simpleHandle.setContext(null);
+            simpleHandle.setState(ModuleState.START_FAILED);
+        }
     }
 
-    private void start(SimpleModuleHandle handle) throws
+    private void start(ModuleHandle handle) throws
             RequireDependencyException,
             IllegalStateException,
             ContextBuildException,
             ContextStartException,
             MeshRegisterException
     {
+
+        ModuleState currentState = handle.state();
+        if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED)
+            throw new IllegalStateException("Required LOADED or STOPPED state to start the module. Actual: " + currentState + ".");
 
         ModuleDescriptor descriptor = handle.descriptor();
         List<ModuleHandle> dependencyHandles = getDependencyHandles(descriptor.id());
@@ -205,14 +230,18 @@ public class SimpleModuleManager implements ModuleManager {
                     .filter(dependency -> dependency.state() != ModuleState.STARTED)
                     .toList();
 
-            throw new RequireDependencyException("Not all dependencies have started.", notStartedDependencies);
+            throw new RequireDependencyException(
+                    "Dependencies have not started: " +
+                            String.join(
+                                    ", ",
+                                    notStartedDependencies.stream().map(dependency -> dependency.descriptor().id()).toList()
+                            ),
+                    notStartedDependencies
+            );
         }
 
-        ModuleState currentState = handle.state();
-        if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED)
-            throw new IllegalStateException("Required LOADED or STOPPED state to start the module. Actual: " + currentState + ".");
-
-        handle.setState(ModuleState.STARTING);
+        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
+        simpleHandle.setState(ModuleState.STARTING);
 
 
         Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
@@ -227,22 +256,21 @@ public class SimpleModuleManager implements ModuleManager {
         Context meshViewContext = contextMesh.register(registration);
         meshViewContext.start();
 
-        handle.setContext(meshViewContext);
-        handle.setState(ModuleState.STARTED);
+        simpleHandle.setContext(meshViewContext);
+        simpleHandle.setState(ModuleState.STARTED);
 
     }
 
     @Override
     public void start(String id) throws ModuleStartException {
         if (!exists(id))
-            throw new ModuleStartException("Module \"" + id + "\" does not exist.");
+            throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
 
         ModuleHandle handle = getHandle(id);
-        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
 
         boolean success = false;
         try {
-            start(simpleHandle);
+            start(handle);
             success = true;
 
         } catch (RequireDependencyException ex) {
@@ -261,7 +289,7 @@ public class SimpleModuleManager implements ModuleManager {
             throw new ModuleStartException("Failed to register module in a context mesh.", ex);
 
         } finally {
-            if (!success) handleModuleError(simpleHandle);
+            if (!success) handleStartError(handle);
 
         }
 
@@ -272,7 +300,6 @@ public class SimpleModuleManager implements ModuleManager {
 
         DiagnosticsBuilder<ModuleStartDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
 
-
         int started = 0;
 
         for (ModuleHandle handle : getHandles()) {
@@ -281,14 +308,12 @@ public class SimpleModuleManager implements ModuleManager {
             String moduleId = descriptor.id();
             SemVersion version = descriptor.version();
 
-            SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
-
             ModuleState state = handle.state();
             if (state != ModuleState.LOADED && state != ModuleState.STOPPED) continue;
 
             boolean success = false;
             try {
-                start(simpleHandle);
+                start(handle);
                 success = true;
                 started++;
 
@@ -307,7 +332,7 @@ public class SimpleModuleManager implements ModuleManager {
                 diagnosticsBuilder.append(ModuleStartDiagnostic.meshRegistrationFailed(moduleId));
 
             } finally {
-                if (!success) handleModuleError(simpleHandle);
+                if (!success) handleStartError(handle);
 
             }
 
@@ -323,6 +348,214 @@ public class SimpleModuleManager implements ModuleManager {
 
         return diagnosticsBuilder.build();
         
+    }
+
+    private void handleStopError(ModuleHandle handle) {
+        if (handle instanceof SimpleModuleHandle simpleHandle) {
+            simpleHandle.setContext(null);
+            simpleHandle.setState(ModuleState.STOP_FAILED);
+        }
+    }
+
+    private boolean stop(ModuleHandle handle, DiagnosticsBuilder<ModuleStopDiagnostic> diagnosticsBuilder) {
+
+        ModuleDescriptor descriptor = handle.descriptor();
+        String moduleId = descriptor.id();
+        SemVersion version = descriptor.version();
+
+        if (handle.state() != ModuleState.STARTED) {
+            diagnosticsBuilder.append(ModuleStopDiagnostic.notStarted(moduleId));
+            return false;
+        }
+
+        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
+        simpleHandle.setState(ModuleState.STOPPING);
+
+        Context context = simpleHandle.context();
+        String contextId = context.getId();
+
+        boolean success = false;
+        try {
+            contextMesh.planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
+            context.dispose();
+
+            simpleHandle.setState(ModuleState.STOPPED);
+            simpleHandle.setContext(null);
+
+            success = true;
+
+        } catch (MeshUnregisterExecuteException ex) {
+            diagnosticsBuilder.append(ModuleStopDiagnostic.meshUnregisterExecuteFailed(moduleId));
+
+        } catch (MeshContextSelectionException ex) {
+            diagnosticsBuilder.append(ModuleStopDiagnostic.meshUnregisterPlanFailed(moduleId));
+
+        }
+
+        if (!success) {
+            handleStopError(simpleHandle);
+            return false;
+        }
+
+        diagnosticsBuilder.append(ModuleStopDiagnostic.stopped(moduleId, version));
+
+        return true;
+    }
+
+    @Override
+    public ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, ModuleSelectionStrategy strategy) throws ModuleStopException {
+
+        if (!exists(id))
+            throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
+
+        try {
+
+            List<ModuleHandle> toStop = strategy.select(id, this);
+
+            return new AbstractModuleBatchCommand<>(toStop) {
+                @Override
+                public Diagnostics<ModuleStopDiagnostic> confirm() {
+                    DiagnosticsBuilder<ModuleStopDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+
+                    int stopped = 0;
+
+                    for (ModuleHandle handle : handles) {
+
+                        if (!stop(handle, diagnosticsBuilder)) continue;
+                        stopped++;
+
+                    }
+
+                    if (stopped > 0) {
+                        diagnosticsBuilder.append(ModuleStopDiagnostic.stoppedN(stopped));
+
+                    } else {
+                        diagnosticsBuilder.append(ModuleStopDiagnostic.nothingStopped());
+
+                    }
+
+                    return diagnosticsBuilder.build();
+                }
+            };
+
+        } catch (ModuleSelectionException ex) {
+            throw new ModuleStopException("Failed to select module group", ex);
+
+        }
+
+    }
+
+    private void handleUnloadError(ModuleHandle handle) {
+        if (handle instanceof SimpleModuleHandle simpleHandle) {
+            simpleHandle.setContext(null);
+            simpleHandle.setState(ModuleState.UNLOAD_FAILED);
+        }
+    }
+
+    private CompletableFuture<ModuleUnloadGCReport> unload(ModuleHandle handle, DiagnosticsBuilder<ModuleUnloadDiagnostic> diagnosticsBuilder) {
+
+        ModuleDescriptor descriptor = handle.descriptor();
+        String moduleId = descriptor.id();
+        SemVersion version = descriptor.version();
+
+        ModuleState state = handle.state();
+        if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
+            diagnosticsBuilder.append(ModuleUnloadDiagnostic.incorrectState(moduleId));
+
+            return CompletableFuture.completedFuture(ModuleUnloadGCReport.notUnloaded(moduleId));
+        }
+
+        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
+        simpleHandle.setState(ModuleState.UNLOADING);
+
+        boolean success = false;
+        try {
+            dependencyResolver.state().forget(moduleId);
+            environment.exportRegistry().unregister(moduleId);
+            handles.remove(moduleId);
+
+            success = true;
+
+        } catch (ResolverForgetException ex) {
+            diagnosticsBuilder.append(ModuleUnloadDiagnostic.forgetFailed(moduleId, ex.getDependents()));
+
+        }
+
+        if (!success) {
+            handleUnloadError(simpleHandle);
+
+            return CompletableFuture.completedFuture(ModuleUnloadGCReport.notUnloaded(moduleId));
+
+        }
+
+        ClassLoader unloadedClassLoader = handle.classLoader();
+        simpleHandle.setClassLoader(null);
+
+        leakDetector.track(moduleId, unloadedClassLoader);
+
+
+        diagnosticsBuilder.append(ModuleUnloadDiagnostic.unloaded(moduleId, version));
+
+        return leakDetector.awaitUnloadAsync(moduleId, Duration.of(5, ChronoUnit.SECONDS))
+                .thenApply(_ -> ModuleUnloadGCReport.success(moduleId))
+                .exceptionally(ex -> ModuleUnloadGCReport.leaked(moduleId, ex));
+
+    }
+
+    @Override
+    public ModuleBatchCommand<ModuleUnloadResult> unload(String id, ModuleSelectionStrategy strategy) throws ModuleUnloadException {
+
+        if (!exists(id))
+            throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
+
+        try {
+
+            List<ModuleHandle> toUnload = strategy.select(id, this);
+
+            return new AbstractModuleBatchCommand<>(toUnload) {
+
+                @Override
+                public ModuleUnloadResult confirm() {
+
+                    DiagnosticsBuilder<ModuleUnloadDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+                    List<CompletableFuture<ModuleUnloadGCReport>> futures = new ArrayList<>();
+
+                    int unloaded = 0;
+
+                    for (ModuleHandle handle : handles) {
+
+                        CompletableFuture<ModuleUnloadGCReport> reportFuture = unload(handle, diagnosticsBuilder);
+                        futures.add(reportFuture);
+
+                        unloaded++;
+
+                    }
+
+                    if (unloaded > 0) {
+                        diagnosticsBuilder.append(ModuleUnloadDiagnostic.unloadedN(unloaded));
+
+                    } else {
+                        diagnosticsBuilder.append(ModuleUnloadDiagnostic.nothingUnloaded());
+
+                    }
+
+                    CompletableFuture<List<ModuleUnloadGCReport>> gcFuture =
+                            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                                    .thenApply(_ -> futures.stream().map(CompletableFuture::join).toList());
+
+                    return new SimpleModuleUnloadResult(
+                            diagnosticsBuilder.build(),
+                            gcFuture
+                    );
+                }
+
+            };
+
+        } catch (ModuleSelectionException ex) {
+            throw new ModuleUnloadException("Failed to select module group", ex);
+
+        }
+
     }
 
 }
