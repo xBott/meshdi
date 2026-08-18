@@ -48,6 +48,7 @@ public interface ModuleManager {
     /// Tries to stop a specified module using a concrete group selection strategy.
     /// Modules are kept in memory, but its context is disposed.
     /// Module must be started before calling stop.
+    /// @return module stop command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleStopException if an error occurred during module unloading.
     ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, ModuleSelectionStrategy strategy) throws ModuleStopException;
@@ -55,6 +56,7 @@ public interface ModuleManager {
     /// Tries to unload a specified module using a concrete group selection strategy.
     /// Modules are completely unloaded from JVM.
     /// Module must be stopped or just loaded before calling unload.
+    /// @return module unload command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleUnloadException if an error occurred during module unloading.
     ModuleBatchCommand<ModuleUnloadResult> unload(String id, ModuleSelectionStrategy strategy) throws ModuleUnloadException;
