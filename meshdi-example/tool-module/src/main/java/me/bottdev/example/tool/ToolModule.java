@@ -30,9 +30,14 @@ public class ToolModule {
     }
 
     @OnLifecycleEvent(BeanLifecycleEventType.POST_CONSTRUCT)
-    public void start() {
-        System.out.println("Starting tool module");
+    public void onStart() {
+        System.out.println("TOOL MODULE IS STARTED SUCCESSFULLY!");
         rootModule.doSomething();
+    }
+
+    @OnLifecycleEvent(BeanLifecycleEventType.PRE_DESTROY)
+    public void onStop() {
+        System.out.println("TOOL MODULE IS STOPPED SUCCESSFULLY!");
     }
 
 }
