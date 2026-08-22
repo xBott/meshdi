@@ -9,7 +9,7 @@ import java.util.Set;
 
 /// Type of [ModuleDiagnostic] for starting of modules.
 public sealed interface ModuleStopDiagnostic extends Diagnostic permits
-        ModuleStopDiagnostic.NotStarted,
+        ModuleStopDiagnostic.IncorrectState,
         ModuleStopDiagnostic.MeshUnregisterPlanFailed,
         ModuleStopDiagnostic.MeshUnregisterExecutionFailed,
         ModuleStopDiagnostic.ForgetFailed,
@@ -18,22 +18,24 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
         ModuleStopDiagnostic.NothingStopped
 {
 
-    static ModuleStopDiagnostic notStarted(
+    static ModuleStopDiagnostic incorrectState(
             @NonNull String id
     ) {
-        return new NotStarted(id);
+        return new IncorrectState(id);
     }
 
     static ModuleStopDiagnostic meshUnregisterPlanFailed(
-            @NonNull String id
+            @NonNull String id,
+            @NonNull Throwable error
     ) {
-        return new MeshUnregisterPlanFailed(id);
+        return new MeshUnregisterPlanFailed(id, error);
     }
 
     static ModuleStopDiagnostic meshUnregisterExecuteFailed(
-            @NonNull String id
+            @NonNull String id,
+            @NonNull Throwable error
     ) {
-        return new MeshUnregisterExecutionFailed(id);
+        return new MeshUnregisterExecutionFailed(id, error);
     }
 
     static ModuleStopDiagnostic forgetFailed(
@@ -60,7 +62,7 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
         return new NothingStopped();
     }
 
-    record NotStarted(String id) implements ModuleStopDiagnostic {
+    record IncorrectState(String id) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -74,7 +76,7 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshUnregisterPlanFailed(String id) implements ModuleStopDiagnostic {
+    record MeshUnregisterPlanFailed(String id, Throwable error) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -83,12 +85,12 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
         @Override
         public String message() {
-            return "Failed to plan unregister context of module in a context mesh: " + id;
+            return "Failed to plan unregister context of module in a context mesh: " + id + ". Error: " + error;
         }
 
     }
 
-    record MeshUnregisterExecutionFailed(String id) implements ModuleStopDiagnostic {
+    record MeshUnregisterExecutionFailed(String id, Throwable error) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -97,7 +99,7 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
         @Override
         public String message() {
-            return "Failed to execute unregister context of module in a context mesh: " + id;
+            return "Failed to execute unregister context of module in a context mesh: " + id + ". Error: " + error;
         }
 
     }

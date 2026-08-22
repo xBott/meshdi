@@ -1,9 +1,9 @@
-package me.bottdev.meshdi.moduleit.core.strategy;
+package me.bottdev.meshdi.moduleit.core.selector;
 
 import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
 import me.bottdev.meshdi.moduleit.api.ModuleHandle;
 import me.bottdev.meshdi.moduleit.api.ModuleManager;
-import me.bottdev.meshdi.moduleit.api.ModuleSelectionStrategy;
+import me.bottdev.meshdi.moduleit.api.StopModuleSelector;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleSelectionException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -17,18 +17,18 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class IfUnusedModuleSelectionStrategyTest {
+class IfUnusedModuleSelectorTest {
 
-    static ModuleSelectionStrategy strategy;
+    static StopModuleSelector strategy;
 
     @BeforeAll
     static void setUp() {
-        strategy = new IfUnusedModuleSelectionStrategy();
+        strategy = new IfUnusedModuleSelector();
     }
 
     @Test
-    @DisplayName("select: successfully select module which is not a dependency of another module")
-    void select_success() throws ModuleSelectionException {
+    @DisplayName("selectStop: successfully select module which is not a dependency of another module")
+    void selectStop_success() throws ModuleSelectionException {
 
         ModuleDescriptor descriptor = mock(ModuleDescriptor.class);
         when(descriptor.id()).thenReturn("b");
@@ -41,7 +41,7 @@ class IfUnusedModuleSelectionStrategyTest {
         when(manager.getDependentHandles("b")).thenReturn(List.of());
         when(manager.getHandle("b")).thenReturn(handle);
 
-        List<ModuleHandle> group = strategy.select("b", manager);
+        List<ModuleHandle> group = strategy.selectStop("b", manager);
 
         assertThat(group)
                 .hasSize(1)
@@ -51,18 +51,18 @@ class IfUnusedModuleSelectionStrategyTest {
 
     @Test
     @DisplayName("select: throws when module does not exist")
-    void select_nonExisting() {
+    void select_Stop_nonExisting() {
 
         ModuleManager manager = mock(ModuleManager.class);
         when(manager.exists(anyString())).thenReturn(false);
 
-        assertThrows(IllegalArgumentException.class, () -> strategy.select("a", manager));
+        assertThrows(IllegalArgumentException.class, () -> strategy.selectStop("a", manager));
 
     }
 
     @Test
-    @DisplayName("select: throws when module is a dependency of another module")
-    void select_dependency() {
+    @DisplayName("selectStop: throws when module is a dependency of another module")
+    void selectStop_dependency() {
 
         ModuleDescriptor descriptorA = mock(ModuleDescriptor.class);
         when(descriptorA.id()).thenReturn("a");
@@ -86,7 +86,7 @@ class IfUnusedModuleSelectionStrategyTest {
         when(manager.exists(anyString())).thenReturn(true);
         when(manager.getDependentHandles("a")).thenReturn(List.of(handleB, handleC));
 
-        ModuleSelectionException ex = assertThrows(ModuleSelectionException.class, () -> strategy.select("a", manager));
+        ModuleSelectionException ex = assertThrows(ModuleSelectionException.class, () -> strategy.selectStop("a", manager));
 
         assertThat(ex)
                 .hasMessageContaining("used by other modules")

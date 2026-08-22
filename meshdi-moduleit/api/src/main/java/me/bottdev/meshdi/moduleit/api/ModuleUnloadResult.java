@@ -6,7 +6,7 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/// A result of [ModuleManager#unload(java.lang.String, me.bottdev.meshdi.moduleit.api.ModuleSelectionStrategy)] method which returns
+/// A result of [ModuleManager#unload(java.lang.String, StopModuleSelector)] method which returns
 /// Diagnostics of unloading process and [CompletableFuture] that allows you to handle GC report.
 public interface ModuleUnloadResult {
 

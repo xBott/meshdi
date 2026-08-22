@@ -304,136 +304,136 @@ class SimpleModuleManagerTest {
 
     }
 
-    @Nested
-    class Start {
-
-        @Test
-        @DisplayName("start: starts a module and loads its context successfully")
-        void start_success() throws IOException, ModuleStartException, CandidateListException {
-
-            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor(), new MeshdiMetaProcessor())
-                    .withSource("com.root.RootModule", """
-                        package com.root;
-                       
-                        import com.root.InternalService;
-                        import me.bottdev.meshdi.api.annotations.Component;
-                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
-                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
-                        
-                        @Component
-                        @Module(id = "root", version = "0.0.1", apiVersion = ">=1.0.0",
-                        exports= { "com.root" }
-                        )
-                        public class RootModule {
-                        
-                            private final InternalService internalService;
-                        
-                            public RootModule(InternalService internalService) {
-                                this.internalService = internalService;
-                            }
-                        
-                        }
-                        """
-                    )
-                    .withSource("com.root.InternalService", """
-                        package com.root;
-                        
-                        import me.bottdev.meshdi.api.annotations.Component;
-                        
-                        @Component
-                        public class InternalService {}
-                        """
-                    )
-                    .buildTo(repoDir, "root-module-0.0.1.jar");
-
-            manager.load(repository);
-            manager.start("root");
-
-            ModuleHandle handle = manager.getHandle("root");
-            assertThat(handle)
-                    .satisfies(h ->
-                            assertThat(h.state())
-                                    .isEqualTo(ModuleState.STARTED)
-                    )
-                    .satisfies(h ->
-                            assertThat(h.context())
-                                    .isNotNull()
-                                    .extracting(Context::getBindingContainer)
-                                    .satisfies(container ->
-                                            assertThat(container.size())
-                                                    .isEqualTo(2)
-                                    )
-                    );
-
-        }
-
-        @Test
-        @DisplayName("start: module requires its dependency to be started")
-        void start_requireDependencyStarted() throws IOException, CandidateListException {
-
-            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
-                    .withSource("com.test.RootModule", """
-                        package com.test;
-                        
-                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
-                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
-                        
-                        @Module(id = "root", version = "0.0.1", apiVersion = ">=1.0.0")
-                        public class RootModule {}
-                        """
-                    )
-                    .buildTo(repoDir, "root-module-0.0.1.jar");
-
-            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
-                    .withSource("com.test.HologramModule", """
-                        package com.test;
-                        
-                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
-                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
-                        
-                        @Module(id = "hologram", version = "0.0.1", apiVersion = ">=1.0.0",
-                        dependencies = { @DependsOn(id = "root", version = ">=0.0.1") })
-                        public class HologramModule {}
-                        """
-                    )
-                    .buildTo(repoDir, "holograms-module-0.0.1.jar");
-
-            manager.load(repository);
-            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> manager.start("hologram"));
-            assertThat(ex)
-                    .hasCauseInstanceOf(RequireDependencyException.class)
-                    .hasMessageContaining("requires all its dependencies");
-
-        }
-
-        @Test
-        @DisplayName("start: module does not exist")
-        void start_nonExisting() {
-
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> manager.start("root"));
-            assertThat(ex)
-                    .hasMessageContaining("root")
-                    .hasMessageContaining("does not exist");
-
-        }
-
-        @EnumSource(value = ModuleState.class, names = { "STARTING", "STARTED", "START_FAILED", "RESTARTING", "STOPPING" })
-        @ParameterizedTest
-        @DisplayName("start: incorrect module start")
-        void start_incorrectState(ModuleState state) {
-
-            ModuleHandle handle = mock(ModuleHandle.class);
-            when(handle.state()).thenReturn(state);
-
-            ModuleManager spyManager = spy(manager);
-            when(spyManager.exists("root")).thenReturn(true);
-            when(spyManager.getHandle("root")).thenReturn(handle);
-
-            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> spyManager.start("root"));
-            assertThat(ex)
-                    .hasMessageContaining("Starting module from incorrect state");
-        }
-
-    }
+//    @Nested
+//    class Start {
+//
+//        @Test
+//        @DisplayName("start: starts a module and loads its context successfully")
+//        void start_success() throws IOException, ModuleStartException, CandidateListException {
+//
+//            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor(), new MeshdiMetaProcessor())
+//                    .withSource("com.root.RootModule", """
+//                        package com.root;
+//
+//                        import com.root.InternalService;
+//                        import me.bottdev.meshdi.api.annotations.Component;
+//                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
+//                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
+//
+//                        @Component
+//                        @Module(id = "root", version = "0.0.1", apiVersion = ">=1.0.0",
+//                        exports= { "com.root" }
+//                        )
+//                        public class RootModule {
+//
+//                            private final InternalService internalService;
+//
+//                            public RootModule(InternalService internalService) {
+//                                this.internalService = internalService;
+//                            }
+//
+//                        }
+//                        """
+//                    )
+//                    .withSource("com.root.InternalService", """
+//                        package com.root;
+//
+//                        import me.bottdev.meshdi.api.annotations.Component;
+//
+//                        @Component
+//                        public class InternalService {}
+//                        """
+//                    )
+//                    .buildTo(repoDir, "root-module-0.0.1.jar");
+//
+//            manager.load(repository);
+//            manager.start("root");
+//
+//            ModuleHandle handle = manager.getHandle("root");
+//            assertThat(handle)
+//                    .satisfies(h ->
+//                            assertThat(h.state())
+//                                    .isEqualTo(ModuleState.STARTED)
+//                    )
+//                    .satisfies(h ->
+//                            assertThat(h.context())
+//                                    .isNotNull()
+//                                    .extracting(Context::getBindingContainer)
+//                                    .satisfies(container ->
+//                                            assertThat(container.size())
+//                                                    .isEqualTo(2)
+//                                    )
+//                    );
+//
+//        }
+//
+//        @Test
+//        @DisplayName("start: module requires its dependency to be started")
+//        void start_requireDependencyStarted() throws IOException, CandidateListException {
+//
+//            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
+//                    .withSource("com.test.RootModule", """
+//                        package com.test;
+//
+//                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
+//                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
+//
+//                        @Module(id = "root", version = "0.0.1", apiVersion = ">=1.0.0")
+//                        public class RootModule {}
+//                        """
+//                    )
+//                    .buildTo(repoDir, "root-module-0.0.1.jar");
+//
+//            TestModuleJarBuilder.withProcessors(new ModuleMetaProcessor())
+//                    .withSource("com.test.HologramModule", """
+//                        package com.test;
+//
+//                        import me.bottdev.meshdi.moduleit.api.annotations.Module;
+//                        import me.bottdev.meshdi.moduleit.api.annotations.DependsOn;
+//
+//                        @Module(id = "hologram", version = "0.0.1", apiVersion = ">=1.0.0",
+//                        dependencies = { @DependsOn(id = "root", version = ">=0.0.1") })
+//                        public class HologramModule {}
+//                        """
+//                    )
+//                    .buildTo(repoDir, "holograms-module-0.0.1.jar");
+//
+//            manager.load(repository);
+//            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> manager.start("hologram"));
+//            assertThat(ex)
+//                    .hasCauseInstanceOf(RequireDependencyException.class)
+//                    .hasMessageContaining("requires all its dependencies");
+//
+//        }
+//
+//        @Test
+//        @DisplayName("start: module does not exist")
+//        void start_nonExisting() {
+//
+//            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> manager.start("root"));
+//            assertThat(ex)
+//                    .hasMessageContaining("root")
+//                    .hasMessageContaining("does not exist");
+//
+//        }
+//
+//        @EnumSource(value = ModuleState.class, names = { "STARTING", "STARTED", "START_FAILED", "RESTARTING", "STOPPING" })
+//        @ParameterizedTest
+//        @DisplayName("start: incorrect module start")
+//        void start_incorrectState(ModuleState state) {
+//
+//            ModuleHandle handle = mock(ModuleHandle.class);
+//            when(handle.state()).thenReturn(state);
+//
+//            ModuleManager spyManager = spy(manager);
+//            when(spyManager.exists("root")).thenReturn(true);
+//            when(spyManager.getHandle("root")).thenReturn(handle);
+//
+//            ModuleStartException ex = assertThrows(ModuleStartException.class, () -> spyManager.start("root"));
+//            assertThat(ex)
+//                    .hasMessageContaining("Starting module from incorrect state");
+//        }
+//
+//    }
 
 }

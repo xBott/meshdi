@@ -2,27 +2,29 @@ package me.bottdev.meshdi.moduleit.api;
 
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleRestartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
-import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStartException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStopException;
-import me.bottdev.meshdi.moduleit.api.exceptions.ModuleUnloadException;
+import me.bottdev.meshdi.moduleit.api.exceptions.*;
 
 import java.util.List;
 
 /// Orchestrator of modules - **handle lifecycle of all modules**.
 public interface ModuleManager {
 
+    /// @return Load environment of the module manager.
     ModuleLoadEnvironment environment();
 
+    /// @return Leak Detector of the module manager, which allows to track module unloading leaks.
     ModuleClassLoaderLeakDetector leakDetector();
 
+    /// @return A list of all module handles.
     List<ModuleHandle> getHandles();
 
+    /// @return Indicates whether the specified module is loaded.
     boolean exists(String id);
 
+    /// @return Module handle with specified id or null.
     ModuleHandle getHandle(String id);
 
     /// @return A list of module handles specified module depends on.
@@ -36,10 +38,11 @@ public interface ModuleManager {
     /// @return Diagnostics of loading process.
     Diagnostics<ModuleLoadDiagnostic> load(ModuleRepository repository) throws CandidateListException;
 
-    /// Starts specified module.
+    /// Tries to start a specified module using a concrete group selection strategy.
+    /// Module must be loaded before calling stop.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleStartException if an error occurred during module startup.
-    void start(String id) throws ModuleStartException;
+    ModuleBatchCommand<Diagnostics<ModuleStartDiagnostic>> start(String id, StartModuleSelector selector) throws ModuleStartException;
 
     /// Starts all modules, that have not started yet.
     /// @return Diagnostics of starting process.
@@ -51,7 +54,11 @@ public interface ModuleManager {
     /// @return module stop command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleStopException if an error occurred during module unloading.
-    ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, ModuleSelectionStrategy strategy) throws ModuleStopException;
+    ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, StopModuleSelector selector) throws ModuleStopException;
+
+    /// Stops all started modules.
+    /// @return Diagnostics of stopping process.
+    Diagnostics<ModuleStopDiagnostic> stopAll();
 
     /// Tries to unload a specified module using a concrete group selection strategy.
     /// Modules are completely unloaded from JVM.
@@ -59,6 +66,21 @@ public interface ModuleManager {
     /// @return module unload command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleUnloadException if an error occurred during module unloading.
-    ModuleBatchCommand<ModuleUnloadResult> unload(String id, ModuleSelectionStrategy strategy) throws ModuleUnloadException;
+    ModuleBatchCommand<ModuleUnloadResult> unload(String id, StopModuleSelector selector) throws ModuleUnloadException;
+
+    /// Unloads all stopped or just loaded modules.
+    /// @return Diagnostics of loading process.
+    ModuleUnloadResult unloadAll();
+
+    /// Tries to restart a specified module using a concrete group selection strategy.
+    /// Module must be started before calling restart.
+    /// @throws IllegalArgumentException if module not found.
+    /// @throws ModuleRestartException if an error occurred during module restart.
+    ModuleBatchCommand<Diagnostics<ModuleRestartDiagnostic>> restart(String id, StopModuleSelector selector) throws ModuleRestartException;
+
+    /// Restarts all modules.
+    /// If module is not started, it will be started automatically.
+    /// @return Diagnostics of restarting process.
+    Diagnostics<ModuleRestartDiagnostic> restartAll();
 
 }

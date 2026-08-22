@@ -7,15 +7,14 @@ import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.meshdi.moduleit.api.*;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleRestartException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleStopException;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleUnloadException;
 import me.bottdev.meshdi.moduleit.core.*;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
+import me.bottdev.meshdi.moduleit.core.selector.ModuleSelectors;
 
 import java.nio.file.Path;
 import java.util.Set;
@@ -26,8 +25,7 @@ public class App {
             CandidateListException,
             ModuleStopException,
             InterruptedException,
-            ModuleUnloadException
-    {
+            ModuleUnloadException, ModuleRestartException {
 
         String pathStr = args[0];
         if (pathStr == null) throw new IllegalArgumentException("repository path must be valid");
@@ -56,10 +54,13 @@ public class App {
         Diagnostics<ModuleStartDiagnostic> startDiagnostics = manager.startAll();
         System.out.println(startDiagnostics);
 
-        Diagnostics<ModuleStopDiagnostic> stopDiagnostics = manager.stop("root", ModuleSelectionStrategies.CASCADE).confirm();
+        Diagnostics<ModuleRestartDiagnostic> restartDiagnostics = manager.restart("root", ModuleSelectors.CASCADE).confirm();
+        System.out.println(restartDiagnostics);
+
+        Diagnostics<ModuleStopDiagnostic> stopDiagnostics = manager.stopAll();
         System.out.println(stopDiagnostics);
 
-        ModuleUnloadResult unloadResult = manager.unload("root", ModuleSelectionStrategies.CASCADE).confirm();
+        ModuleUnloadResult unloadResult = manager.unloadAll();
         Diagnostics<ModuleUnloadDiagnostic> unloadDiagnostics = unloadResult.diagnostics();
         System.out.println(unloadDiagnostics);
 
