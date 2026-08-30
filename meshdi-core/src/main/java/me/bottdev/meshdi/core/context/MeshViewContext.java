@@ -1,6 +1,5 @@
 package me.bottdev.meshdi.core.context;
 
-import lombok.Getter;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.core.resolvers.MeshBeanResolver;
 
@@ -9,7 +8,6 @@ import java.util.Objects;
 public class MeshViewContext extends AbstractContext {
 
     private final Context delegate;
-    @Getter
     private final BeanResolver resolver;
 
     public MeshViewContext(
@@ -21,18 +19,28 @@ public class MeshViewContext extends AbstractContext {
     }
 
     @Override
-    public String getId() {
-        return delegate.getId();
+    public ContextState state() {
+        return state;
     }
 
     @Override
-    public BindingContainer getBindingContainer() {
-        return delegate.getBindingContainer();
+    public String id() {
+        return delegate.id();
     }
 
     @Override
-    public BeanLifecycleManager getLifecycleManager() {
-        return delegate.getLifecycleManager();
+    public BindingContainer bindingManager() {
+        return delegate.bindingManager();
+    }
+
+    @Override
+    public BeanLifecycleManager lifecycleManager() {
+        return delegate.lifecycleManager();
+    }
+
+    @Override
+    public BeanResolver resolver() {
+        return resolver;
     }
 
     @Override

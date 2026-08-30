@@ -2,24 +2,19 @@ package me.bottdev.meshdi.core.bindings;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import me.bottdev.kern.commons.key.SimpleTypedKey;
 import me.bottdev.kern.commons.key.TypedKey;
-import me.bottdev.kern.dependency.DependOrder;
-import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
-import me.bottdev.kern.dependency.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
-import me.bottdev.meshdi.api.annotations.Dependency;
-import me.bottdev.meshdi.api.annotations.Inject;
-import me.bottdev.meshdi.api.exceptions.BeanConstructorException;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
+import me.bottdev.meshdi.core.reflection.BeanInstantiator;
+import me.bottdev.meshdi.core.reflection.SimpleBeanInstantiator;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Parameter;
-import java.util.*;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 public class ConstructorBinding<T> implements Binding<T> {
 
@@ -70,67 +65,26 @@ public class ConstructorBinding<T> implements Binding<T> {
             return this;
         }
 
-        @SuppressWarnings("unchecked")
-        private Constructor<T> findConstructor() throws BeanConstructorException {
-
-            Constructor<?>[] constructors = implementation.getDeclaredConstructors();
-
-            if (constructors.length == 1) {
-                Constructor<T> ctor = (Constructor<T>) constructors[0];
-                ctor.setAccessible(true);
-                return ctor;
-
-            } else {
-
-                List<Constructor<?>> injected = Arrays.stream(constructors)
-                        .filter(c -> c.isAnnotationPresent(Inject.class))
-                        .toList();
-
-                return switch (injected.size()) {
-                    case 0 -> throw new BeanConstructorException(
-                            implementation + " has multiple constructors without @Inject. " +
-                                    "Annotate exactly one constructor with @Inject."
-                    );
-                    case 1 -> {
-                        Constructor<T> ctor = (Constructor<T>) injected.getFirst();
-                        ctor.setAccessible(true);
-                        yield ctor;
-                    }
-                    default -> throw new BeanConstructorException(
-                            implementation + " has multiple constructors annotated with @Inject. " +
-                                    "Exactly one constructor must carry @Inject."
-                    );
-                };
-
-            }
-
-        }
-
         public ConstructorBinding<T> build() throws BindingBuildException {
             try {
-
                 Objects.requireNonNull(scopeType, "Binding bean scope must be non-null.");
 
                 if (implementation == null) implementation = key.type();
-                Constructor<T> constructor = findConstructor();
+                
+                BeanInstantiator<T> instantiator = new SimpleBeanInstantiator<>(implementation);
 
                 return new ConstructorBinding<>(
                         key,
                         initializationStrategy,
                         scopeType,
-                        constructor,
+                        instantiator,
                         eventHandlers
                 );
-
-            } catch (BeanConstructorException ex) {
-                throw new BindingBuildException("Failed to find a suitable constructor for " + key.type(), ex);
 
             } catch (Exception ex) {
                 throw new BindingBuildException("Failed to build a constructor binding", ex);
             }
-
         }
-
     }
 
     public static <T> Builder<T> builder(TypedKey<T> key) {
@@ -140,80 +94,36 @@ public class ConstructorBinding<T> implements Binding<T> {
     @Getter private final TypedKey<T> key;
     @Getter private final InitializationStrategy initializationStrategy;
     @Getter private final ScopeType scopeType;
-    private final Constructor<? extends T> constructor;
+    private final BeanInstantiator<T> instantiator;
     private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers;
-
-    private final List<DependencyRequest<TypedKey<?>>> dependencies = new ArrayList<>();
 
     public ConstructorBinding(
             TypedKey<T> key,
             InitializationStrategy initializationStrategy,
             ScopeType scopeType,
-            Constructor<? extends T> constructor,
+            BeanInstantiator<T> instantiator,
             Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers
     ) {
         Objects.requireNonNull(key, "Binding key must be non-null.");
         Objects.requireNonNull(scopeType, "Binding bean scope must be non-null.");
-        Objects.requireNonNull(constructor, "Bean constructor must be non-null.");
-        Objects.requireNonNull(constructor, "Bean destroyer must be non-null.");
+        Objects.requireNonNull(instantiator, "Bean instantiator must be non-null.");
         Objects.requireNonNull(eventHandlers, "Bean event handlers must be non-null.");
 
         this.key = key;
         this.initializationStrategy = initializationStrategy;
         this.scopeType = scopeType;
-        this.constructor = constructor;
+        this.instantiator = instantiator;
         this.eventHandlers = Map.copyOf(eventHandlers);
-
-        fetchDependenciesFromConstructor();
-    }
-
-    private DependencyRequest<TypedKey<?>> getParameterDependencyRequest(Parameter parameter) {
-        Class<?> type = parameter.getType();
-        if (!parameter.isAnnotationPresent(Dependency.class))
-            return new SimpleDependencyRequest<>(SimpleTypedKey.of(type), DependencyLink.REQUIRED, DependOrder.AFTER);
-
-        Dependency dependency = parameter.getAnnotation(Dependency.class);
-        String qualifier = dependency.qualifier();
-        DependencyLink link = dependency.link();
-        DependOrder order = dependency.order();
-        TypedKey<?> key = qualifier == null ?
-                SimpleTypedKey.of(type) :
-                SimpleTypedKey.of(type, qualifier);
-
-        return new SimpleDependencyRequest<>(key, link, order);
-    }
-
-    private void fetchDependenciesFromConstructor() {
-        Arrays.stream(constructor.getParameters())
-                .forEach(parameter -> {
-                    DependencyRequest<TypedKey<?>> request = getParameterDependencyRequest(parameter);
-                    dependencies.add(request);
-                });
     }
 
     @Override
     public List<DependencyRequest<TypedKey<?>>> getDependencies() {
-        return Collections.unmodifiableList(dependencies);
+        return instantiator.getDependencies();
     }
 
     @Override
     public T create(BeanResolver resolver) throws BeanCreationException {
-        Object[] args = dependencies.stream()
-                .map(request -> resolver.get((TypedKey<?>) request.key()))
-                .toArray();
-        try {
-            return constructor.newInstance(args);
-
-        } catch (InvocationTargetException ex) {
-            throw new BeanCreationException("Constructor of a bean has thrown an exception.", ex);
-
-        } catch (InstantiationException ex) {
-            throw new BeanCreationException("Cannot create an instance of abstract class.", ex);
-
-        } catch (IllegalAccessException ex) {
-            throw new BeanCreationException("Constructor of a bean is not accessible.", ex);
-
-        }
+        return instantiator.instantiate(resolver);
     }
 
     @Override
@@ -225,8 +135,6 @@ public class ConstructorBinding<T> implements Binding<T> {
 
         } catch (Exception ex) {
             throw new BeanLifecycleEventHandleException("Failed to invoke destroyer.", ex);
-
         }
     }
-
 }

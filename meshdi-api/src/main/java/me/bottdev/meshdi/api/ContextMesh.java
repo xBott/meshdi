@@ -10,21 +10,21 @@ import java.util.Optional;
 import java.util.Set;
 
 /// A special structure that connects several [Context] into one ecosystem.
-public interface ContextMesh<R extends MeshRegistration> extends Disposable {
+public interface ContextMesh extends Disposable {
 
     boolean contains(String id);
 
-    Context register(R registration) throws MeshRegisterException;
+    Context register(MeshRegistration registration) throws MeshRegisterException;
 
     MeshUnregisterCommand planUnregister(String id, MeshContextSelectionStrategy strategy)
             throws MeshContextSelectionException;
 
-    R get(String id);
+    MeshRegistration get(String id);
 
     /// @return Registered contexts in sorted order.
     List<Context> getContexts();
 
-    Optional<R> find(String id);
+    Optional<MeshRegistration> find(String id);
 
     Set<String> getVisibleContexts(String id);
 

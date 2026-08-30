@@ -4,6 +4,7 @@ import lombok.Getter;
 import me.bottdev.meshdi.api.BeanLifecycleManager;
 import me.bottdev.meshdi.api.BeanResolver;
 import me.bottdev.meshdi.api.BindingContainer;
+import me.bottdev.meshdi.api.ContextState;
 
 import java.util.Objects;
 
@@ -32,6 +33,31 @@ public class SimpleContext extends AbstractContext {
     protected void onDispose() {
         lifecycleManager.dispose();
         bindingContainer.dispose();
+    }
+
+    @Override
+    public ContextState state() {
+        return state;
+    }
+
+    @Override
+    public String id() {
+        return id;
+    }
+
+    @Override
+    public BindingContainer bindingManager() {
+        return bindingContainer;
+    }
+
+    @Override
+    public BeanLifecycleManager lifecycleManager() {
+        return lifecycleManager;
+    }
+
+    @Override
+    public BeanResolver resolver() {
+        return resolver;
     }
 
 }

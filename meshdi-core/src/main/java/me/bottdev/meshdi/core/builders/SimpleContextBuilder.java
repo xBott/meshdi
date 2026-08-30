@@ -87,7 +87,7 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
             }
 
             BindingContainer bindingContainer = new SimpleBindingContainer(bindings);
-            dependencyResolver.resolve(bindingContainer);
+            dependencyResolver.resolve(bindingContainer).unwrapOrThrow();
 
             BeanResolver resolver = resolverFactory.apply(bindingContainer);
             return new SimpleContext(id, bindingContainer, lifecycleManager, resolver);

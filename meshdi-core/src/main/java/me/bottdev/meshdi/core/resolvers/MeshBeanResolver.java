@@ -14,7 +14,7 @@ public class MeshBeanResolver implements BeanResolver {
     private final String contextId;
     private final BindingContainer bindingContainer;
     private final BeanLifecycleManager lifecycleManager;
-    private final ContextMesh<?> mesh;
+    private final ContextMesh mesh;
 
     @Override
     public <T> boolean contains(TypedKey<T> key) {
@@ -43,8 +43,8 @@ public class MeshBeanResolver implements BeanResolver {
             ContextMeshLookup<T> lookup = lookupOptional.get();
 
             try {
-                BeanLifecycleManager targetLifecycleManager = lookup.owner().getLifecycleManager();
-                BeanResolver targetResolver = lookup.owner().getResolver();
+                BeanLifecycleManager targetLifecycleManager = lookup.owner().lifecycleManager();
+                BeanResolver targetResolver = lookup.owner().resolver();
                 Binding<T> targetBinding = lookup.binding();
 
                 return targetLifecycleManager.getOrCreate(targetBinding, targetResolver);
@@ -79,8 +79,8 @@ public class MeshBeanResolver implements BeanResolver {
             ContextMeshLookup<T> lookup = lookupOptional.get();
 
             try {
-                BeanLifecycleManager targetLifecycleManager = lookup.owner().getLifecycleManager();
-                BeanResolver targetResolver = lookup.owner().getResolver();
+                BeanLifecycleManager targetLifecycleManager = lookup.owner().lifecycleManager();
+                BeanResolver targetResolver = lookup.owner().resolver();
                 Binding<T> targetBinding = lookup.binding();
 
                 T value = targetLifecycleManager.getOrCreate(targetBinding, targetResolver);

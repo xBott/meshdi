@@ -2,7 +2,9 @@ package me.bottdev.meshdi.moduleit.core;
 
 import lombok.Getter;
 import lombok.NonNull;
-import me.bottdev.meshdi.moduleit.api.ModuleExportRegistry;
+
+import me.bottdev.meshdi.moduleit.api.classprovider.ClassProvider;
+import me.bottdev.meshdi.moduleit.api.classprovider.ClassProviderContainer;
 
 import java.io.IOException;
 import java.net.URL;
@@ -15,47 +17,26 @@ public class ModuleClassLoader extends URLClassLoader {
         ClassLoader.registerAsParallelCapable();
     }
 
-    private static final Set<String> PLATFORM_PREFIXES = Set.of(
-            "java.", "javax.", "jdk.", "sun.", "com.sun."
-    );
-
     private final String moduleId;
-    private final ClassLoader apiLoader;
-    private final Set<String> apiPackages;
-    private final ModuleExportRegistry exportRegistry;
     private final List<String> dependencyIds;
+    private final ClassProviderContainer providerContainer;
 
     @Getter
     private volatile boolean closed = false;
 
     public ModuleClassLoader(
             @NonNull String moduleId,
-            @NonNull URL moduleURL,
-            @NonNull ClassLoader apiLoader,
-            @NonNull Set<String> apiPackages,
-            @NonNull ModuleExportRegistry exportRegistry,
+            @NonNull URL[] moduleURLs,
+            @NonNull ClassProviderContainer providerContainer,
             @NonNull List<String> dependencyIds
     ) {
-        super(new URL[]{moduleURL}, null);
+        super(moduleURLs, null);
         this.moduleId = moduleId;
-        this.apiLoader = apiLoader;
-        this.apiPackages = apiPackages;
-        this.exportRegistry = exportRegistry;
+        this.providerContainer = providerContainer;
         this.dependencyIds = dependencyIds;
     }
 
-    private boolean isPlatformClass(String name) {
-        for (String prefix : PLATFORM_PREFIXES) {
-            if (name.startsWith(prefix)) return true;
-        }
-        return false;
-    }
 
-    private boolean isApiPackage(String name) {
-        int lastDot = name.lastIndexOf('.');
-        String pkg = lastDot < 0 ? "" : name.substring(0, lastDot);
-        return apiPackages.contains(pkg) || apiPackages.stream().anyMatch(pkg::startsWith);
-    }
 
     private ClassNotFoundException enrichedNotFound(String name, ClassNotFoundException cause) {
         return new ClassNotFoundException(
@@ -82,31 +63,22 @@ public class ModuleClassLoader extends URLClassLoader {
                 return loaded;
             }
 
-            if (isPlatformClass(name)) {
-                Class<?> clazz = findSystemClass(name);
-                if (resolve) resolveClass(clazz);
-                return clazz;
-            }
-
-            if (isApiPackage(name)) {
-                Class<?> clazz = apiLoader.loadClass(name);
-                if (resolve) resolveClass(clazz);
-                return clazz;
-            }
-
-            String owner = exportRegistry.getIdByClassName(name);
-            if (owner != null && !owner.equals(moduleId)) {
-                ClassLoader ownerLoader = exportRegistry.getClassLoaderById(owner);
-                Class<?> clazz = ownerLoader.loadClass(name);
-                if (resolve) resolveClass(clazz);
-                return clazz;
+            for (ClassProvider provider : providerContainer.providers()) {
+                try {
+                    Class<?> clazz = provider.provideClass(name);
+                    if (clazz != null) {
+                        if (resolve) resolveClass(clazz);
+                        return clazz;
+                    }
+                } catch (ClassNotFoundException ex) {
+                    throw enrichedNotFound(name, ex);
+                }
             }
 
             try {
                 Class<?> clazz = findClass(name);
                 if (resolve) resolveClass(clazz);
                 return clazz;
-
             } catch (ClassNotFoundException ex) {
                 throw enrichedNotFound(name, ex);
             }
@@ -129,23 +101,33 @@ public class ModuleClassLoader extends URLClassLoader {
 
     @Override
     public URL getResource(String name) {
-        URL own = findResource(name);
-        if (own != null) return own;
-
-        return apiLoader.getResource(name);
+        for (ClassProvider provider : providerContainer.providers()) {
+            URL url = provider.provideResource(name);
+            if (url != null) return url;
+        }
+        return findResource(name);
     }
 
     @Override
     public Enumeration<URL> getResources(String name) throws IOException {
         List<URL> results = new ArrayList<>();
-
-        findResource(name);
+        
+        for (ClassProvider provider : providerContainer.providers()) {
+            Enumeration<URL> urls = provider.provideResources(name);
+            if (urls != null) {
+                while (urls.hasMoreElements()) {
+                    results.add(urls.nextElement());
+                }
+            }
+        }
+        
         Enumeration<URL> own = findResources(name);
-        while (own.hasMoreElements()) results.add(own.nextElement());
-
-        Enumeration<URL> fromApi = apiLoader.getResources(name);
-        while (fromApi.hasMoreElements()) results.add(fromApi.nextElement());
-
+        if (own != null) {
+            while (own.hasMoreElements()) {
+                results.add(own.nextElement());
+            }
+        }
+        
         return Collections.enumeration(results);
     }
 
@@ -157,7 +139,6 @@ public class ModuleClassLoader extends URLClassLoader {
             if (closed) return;
             closed = true;
 
-            exportRegistry.unregister(moduleId);
             super.close();
 
         }

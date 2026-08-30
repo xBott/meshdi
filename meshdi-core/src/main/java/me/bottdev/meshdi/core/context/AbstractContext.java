@@ -1,20 +1,23 @@
 package me.bottdev.meshdi.core.context;
 
-import lombok.Getter;
 import me.bottdev.meshdi.api.Binding;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.ContextState;
 import me.bottdev.meshdi.api.InitializationStrategy;
-import me.bottdev.meshdi.api.exceptions.BeanLifecycleException;
-import me.bottdev.meshdi.api.exceptions.ContextStartException;
+import me.bottdev.meshdi.api.exceptions.*;
+import me.bottdev.meshdi.core.reflection.BeanInstantiator;
+import me.bottdev.meshdi.core.reflection.SimpleBeanInstantiator;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class AbstractContext implements Context {
 
-    @Getter
     protected ContextState state = ContextState.CREATED;
     private final AtomicBoolean disposed = new AtomicBoolean(false);
+
+    private final Map<Class<?>, BeanInstantiator<?>> autowireCache = new ConcurrentHashMap<>();
 
     protected void requireState(ContextState state) throws IllegalStateException {
         if (this.state != state)
@@ -41,9 +44,34 @@ public abstract class AbstractContext implements Context {
     }
 
     protected void initializeEagerBindings() throws BeanLifecycleException {
-        for (Binding<?> binding : getBindingContainer().getBindings()) {
+        for (Binding<?> binding : bindingManager().getBindings()) {
             if (binding.getInitializationStrategy() != InitializationStrategy.EAGER) continue;
-            getLifecycleManager().getOrCreate(binding, getResolver());
+            lifecycleManager().getOrCreate(binding, resolver());
+        }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T autowire(Class<? extends T> implementation) {
+        BeanInstantiator<T> instantiator = (BeanInstantiator<T>) autowireCache.computeIfAbsent(
+                implementation,
+                _ -> {
+                    try {
+                        return new SimpleBeanInstantiator<>(implementation);
+
+                    } catch (BeanConstructorException ex) {
+                        throw new BeanAutowireException("Cannot autowire class " + implementation.getName(), ex);
+
+                    }
+                }
+        );
+
+        try {
+            return instantiator.instantiate(resolver());
+
+        } catch (BeanCreationException ex) {
+            throw new BeanAutowireException("Failed to instantiate " + implementation.getName(), ex);
+
         }
     }
 

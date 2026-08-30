@@ -12,7 +12,7 @@ import java.util.*;
 public class CascadeMeshContextSelectionStrategy implements MeshContextSelectionStrategy {
 
     @Override
-    public List<String> select(String id, ContextMesh<?> mesh) {
+    public List<String> select(String id, ContextMesh mesh) {
 
         if (!mesh.contains(id))
             throw new IllegalArgumentException("Context \"" + id + "\" does not exist in a mesh.");
@@ -21,7 +21,7 @@ public class CascadeMeshContextSelectionStrategy implements MeshContextSelection
         collectAffectedModules(id, mesh, affected);
 
         return mesh.getContexts().reversed().stream()
-                .map(Context::getId)
+                .map(Context::id)
                 .filter(affected::contains)
                 .toList();
 
@@ -29,7 +29,7 @@ public class CascadeMeshContextSelectionStrategy implements MeshContextSelection
 
     private void collectAffectedModules(
             String current,
-            ContextMesh<?> mesh,
+            ContextMesh mesh,
             Set<String> affected
     ) {
         if (!affected.add(current)) return;

@@ -30,24 +30,24 @@ class CascadeMeshContextSelectionStrategyTest {
     void select_cascade() {
 
         Context contextA = mock(Context.class);
-        when(contextA.getId()).thenReturn("a");
+        when(contextA.id()).thenReturn("a");
 
         Context contextB = mock(Context.class);
-        when(contextB.getId()).thenReturn("b");
+        when(contextB.id()).thenReturn("b");
 
         Context contextC = mock(Context.class);
-        when(contextC.getId()).thenReturn("c");
+        when(contextC.id()).thenReturn("c");
 
         Context contextD = mock(Context.class);
-        when(contextD.getId()).thenReturn("d");
+        when(contextD.id()).thenReturn("d");
 
         Context contextE = mock(Context.class);
-        when(contextE.getId()).thenReturn("e");
+        when(contextE.id()).thenReturn("e");
 
         Context contextF = mock(Context.class);
-        when(contextF.getId()).thenReturn("f");
+        when(contextF.id()).thenReturn("f");
 
-        ContextMesh<?> mesh = mock(ContextMesh.class);
+        ContextMesh mesh = mock(ContextMesh.class);
         when(mesh.contains(anyString())).thenReturn(true);
         when(mesh.getContexts()).thenReturn(List.of(contextA, contextB, contextC, contextD, contextE, contextF));
         when(mesh.getDependingContexts("a")).thenReturn(Set.of("b"));
@@ -95,7 +95,7 @@ class CascadeMeshContextSelectionStrategyTest {
     @DisplayName("select: throws when context does not exist")
     void select_nonExisting() {
 
-        ContextMesh<?> mesh = mock(ContextMesh.class);
+        ContextMesh mesh = mock(ContextMesh.class);
         when(mesh.contains(anyString())).thenReturn(false);
 
         assertThrows(IllegalArgumentException.class, () -> strategy.select("a", mesh));
