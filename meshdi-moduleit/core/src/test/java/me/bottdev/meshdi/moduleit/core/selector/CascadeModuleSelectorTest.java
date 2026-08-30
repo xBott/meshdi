@@ -3,7 +3,7 @@ package me.bottdev.meshdi.moduleit.core.selector;
 import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
 import me.bottdev.meshdi.moduleit.api.ModuleHandle;
 import me.bottdev.meshdi.moduleit.api.ModuleManager;
-import me.bottdev.meshdi.moduleit.api.StopModuleSelector;
+import me.bottdev.meshdi.moduleit.api.DependentModuleSelector;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleSelectionException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 
 class CascadeModuleSelectorTest {
 
-    static StopModuleSelector strategy;
+    static DependentModuleSelector strategy;
 
     @BeforeAll
     static void setUp() {
@@ -28,7 +28,7 @@ class CascadeModuleSelectorTest {
 
     @Test
     @DisplayName("selectStop: successfully select modules in correct order")
-    void selectStop_success() throws ModuleSelectionException {
+    void selectDependents_success() throws ModuleSelectionException {
 
         ModuleDescriptor descriptorA = mock(ModuleDescriptor.class);
         when(descriptorA.id()).thenReturn("a");
@@ -69,11 +69,11 @@ class CascadeModuleSelectorTest {
         when(manager.getDependentHandles("d")).thenReturn(List.of(handleE));
         when(manager.getDependentHandles("e")).thenReturn(List.of());
 
-        List<ModuleHandle> groupA = strategy.selectStop("a", manager);
-        List<ModuleHandle> groupB = strategy.selectStop("b", manager);
-        List<ModuleHandle> groupC = strategy.selectStop("c", manager);
-        List<ModuleHandle> groupD = strategy.selectStop("d", manager);
-        List<ModuleHandle> groupE = strategy.selectStop("e", manager);
+        List<ModuleHandle> groupA = strategy.selectDependents("a", manager);
+        List<ModuleHandle> groupB = strategy.selectDependents("b", manager);
+        List<ModuleHandle> groupC = strategy.selectDependents("c", manager);
+        List<ModuleHandle> groupD = strategy.selectDependents("d", manager);
+        List<ModuleHandle> groupE = strategy.selectDependents("e", manager);
 
         assertThat(groupA)
                 .hasSize(5)
@@ -99,12 +99,12 @@ class CascadeModuleSelectorTest {
 
     @Test
     @DisplayName("select: throws when module does not exist")
-    void selectStop_nonExisting() {
+    void selectDependents_nonExisting() {
 
         ModuleManager manager = mock(ModuleManager.class);
         when(manager.exists(anyString())).thenReturn(false);
 
-        assertThrows(IllegalArgumentException.class, () -> strategy.selectStop("a", manager));
+        assertThrows(IllegalArgumentException.class, () -> strategy.selectDependents("a", manager));
 
     }
 

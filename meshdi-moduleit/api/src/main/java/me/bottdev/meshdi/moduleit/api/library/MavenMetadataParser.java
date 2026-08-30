@@ -1,25 +1,16 @@
 package me.bottdev.meshdi.moduleit.api.library;
 
 import me.bottdev.meshdi.moduleit.api.exceptions.library.PomParseException;
-import org.w3c.dom.Document;
+import me.bottdev.meshdi.moduleit.api.library.xml.XmlNode;
+import me.bottdev.meshdi.moduleit.api.library.xml.XmlParser;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.nio.file.Path;
 
 public class MavenMetadataParser {
 
     public static String resolveSnapshotVersion(Path metadataFile, String baseVersion) throws PomParseException {
         try {
-            DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-            dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
-            dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            dbf.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-            dbf.setXIncludeAware(false);
-            dbf.setExpandEntityReferences(false);
-
-            Document doc = dbf.newDocumentBuilder().parse(metadataFile.toFile());
-            XmlNode root = new XmlNode(doc.getDocumentElement());
+            XmlNode root = XmlParser.parse(metadataFile);
 
             XmlNode versioning = root.child("versioning");
             if (versioning != null) {

@@ -25,7 +25,7 @@ public interface ModuleClassLoaderLeakDetector extends AutoCloseable {
     /// garbage collected, or completes exceptionally with IllegalStateException if it
     /// hasn't happened within `timeout`. Never blocks the calling thread -
     /// GC nudging and polling both happen on the detector's background thread.
-    CompletableFuture<Void> awaitUnloadAsync(String moduleId, Duration timeout);
+    CompletableFuture<LeakDetectorResult> awaitUnloadAsync(String moduleId, Duration timeout);
 
     /// Number of ClassLoaders currently believed to still be alive.
     int trackedCount();

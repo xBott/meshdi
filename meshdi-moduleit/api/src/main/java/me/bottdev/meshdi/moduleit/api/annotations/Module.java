@@ -16,5 +16,7 @@ public @interface Module {
     String apiVersion() default "*";
     DependsOn[] dependencies() default {};
     String[] exports() default {};
+    Repository[] repositories() default {};
+    Library[] libraries() default {};
 
 }

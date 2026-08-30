@@ -1,4 +1,4 @@
-package me.bottdev.meshdi.moduleit.api.library;
+package me.bottdev.meshdi.moduleit.api.library.xml;
 
 import org.w3c.dom.Document;
 
@@ -9,7 +9,6 @@ public class XmlParser {
 
     public static XmlNode parse(Path file) throws Exception {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-        // Защита от XXE (XML External Entity) уязвимостей и DoS (Billion Laughs)
         dbf.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
         dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);

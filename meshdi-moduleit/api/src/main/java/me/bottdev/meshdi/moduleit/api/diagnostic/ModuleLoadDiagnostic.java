@@ -2,51 +2,23 @@ package me.bottdev.meshdi.moduleit.api.diagnostic;
 
 import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.DiagnosticType;
-import me.bottdev.kern.commons.diagnostic.Diagnostics;
-import me.bottdev.kern.dependency.DependencyDiagnostic;
 import me.bottdev.kern.version.SemVersion;
-import me.bottdev.kern.version.VersionRange;
+import me.bottdev.meshdi.moduleit.api.ModuleState;
 
 /// Type of [ModuleDiagnostic] for loading of modules.
 public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
-        ModuleLoadDiagnostic.AlreadyLoaded,
-        ModuleLoadDiagnostic.Duplicate,
-        ModuleLoadDiagnostic.ApiVersionMismatch,
-        ModuleLoadDiagnostic.BadResolution,
-        ModuleLoadDiagnostic.Loaded
+        ModuleLoadDiagnostic.IncorrectState,
+        ModuleLoadDiagnostic.ExportsRegistered,
+        ModuleLoadDiagnostic.Loaded,
+        ModuleLoadDiagnostic.LoadedN,
+        ModuleLoadDiagnostic.NothingLoaded,
+        ModuleLoadDiagnostic.MalformedLibraryUrl
 {
 
-    static ModuleLoadDiagnostic alreadyLoaded(@NonNull String id) {
-        return new AlreadyLoaded(id);
-    }
-
-    static ModuleLoadDiagnostic duplicate(@NonNull String id) {
-        return new Duplicate(id);
-    }
-
-    static ModuleLoadDiagnostic apiVersionMismatch(
+    record IncorrectState(
             @NonNull String id,
-            @NonNull VersionRange range,
-            @NonNull SemVersion actual
-    ) {
-        return new ApiVersionMismatch(id, range, actual);
-    }
-
-    static ModuleLoadDiagnostic badResolution(
-            @NonNull Diagnostics<DependencyDiagnostic> diagnostics
-    ) {
-        return new BadResolution(diagnostics);
-    }
-
-    static ModuleLoadDiagnostic loaded(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Loaded(id, version);
-    }
-
-    record AlreadyLoaded(String id) implements ModuleLoadDiagnostic {
-
+            @NonNull ModuleState actualState
+    ) implements ModuleLoadDiagnostic {
         @Override
         public DiagnosticType type() {
             return DiagnosticType.WARN;
@@ -54,55 +26,23 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
         @Override
         public String message() {
-            return "Module is already loaded: " + id;
+            return "Module must be ready: " + id + ". Actual state: " + actualState;
         }
-
     }
 
-    record Duplicate(String id) implements ModuleLoadDiagnostic {
-
+    record ExportsRegistered(@NonNull String id, int amount) implements ModuleLoadDiagnostic {
         @Override
         public DiagnosticType type() {
-            return DiagnosticType.WARN;
+            return DiagnosticType.INFO;
         }
 
         @Override
         public String message() {
-            return "Found duplicate module: " + id;
+            return "Registered " + amount + " exports for module: " + id;
         }
-
     }
 
-    record ApiVersionMismatch(String id, VersionRange range, SemVersion actual) implements ModuleLoadDiagnostic {
-
-        @Override
-        public DiagnosticType type() {
-            return DiagnosticType.WARN;
-        }
-
-        @Override
-        public String message() {
-            return "API version mismatch: " + id + " requires API version " + range + ", actual: " + actual;
-        }
-
-    }
-
-    record BadResolution(Diagnostics<DependencyDiagnostic> diagnostics) implements ModuleLoadDiagnostic {
-
-        @Override
-        public DiagnosticType type() {
-            return DiagnosticType.ERROR;
-        }
-
-        @Override
-        public String message() {
-            return "Module resolution has failed.\n" + diagnostics;
-        }
-
-    }
-
-    record Loaded(String id, SemVersion version) implements ModuleLoadDiagnostic {
-
+    record Loaded(@NonNull String id, @NonNull SemVersion version) implements ModuleLoadDiagnostic {
         @Override
         public DiagnosticType type() {
             return DiagnosticType.INFO;
@@ -112,7 +52,42 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
         public String message() {
             return "Successfully loaded module: " + id + " " + version;
         }
+    }
 
+    record LoadedN(int amount) implements ModuleLoadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "Successfully loaded modules: " + amount + "x";
+        }
+    }
+
+    record NothingLoaded() implements ModuleLoadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "No modules loaded.";
+        }
+    }
+
+    record MalformedLibraryUrl(@NonNull String moduleId, @NonNull java.nio.file.Path path, @NonNull String reason) implements ModuleLoadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.ERROR;
+        }
+
+        @Override
+        public String message() {
+            return "Failed to convert library path to URL for module " + moduleId + " (Path: " + path + "): " + reason;
+        }
     }
 
 }

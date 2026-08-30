@@ -4,9 +4,9 @@ import me.bottdev.meshdi.moduleit.api.exceptions.ModuleSelectionException;
 
 import java.util.List;
 
-/// Strategy that selects a group of modules to perform a start operation.
-public interface StartModuleSelector {
+/// Strategy that selects a group of modules, provided module depends on.
+public interface DependencyModuleSelector {
 
-    List<ModuleHandle> selectStart(String id, ModuleManager manager) throws ModuleSelectionException;
+    List<ModuleHandle> selectDependencies(String id, ModuleManager manager) throws ModuleSelectionException;
 
 }

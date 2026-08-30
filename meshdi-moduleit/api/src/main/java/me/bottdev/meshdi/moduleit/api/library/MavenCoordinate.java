@@ -42,6 +42,18 @@ public record MavenCoordinate(
         return base + "." + extension;
     }
 
+    /// Relative path for a resolved snapshot (e.g. timestamped filename)
+    public String snapshotRepositoryPath(String extension, String resolvedSnapshotVersion) {
+        String base = groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" +
+                artifactId + "-" + resolvedSnapshotVersion + (classifier != null ? "-" + classifier : "");
+        return base + "." + extension;
+    }
+
+    /// Relative path to maven-metadata.xml
+    public String metadataPath() {
+        return groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/maven-metadata.xml";
+    }
+
     @NonNull
     @Override
     public String toString() {

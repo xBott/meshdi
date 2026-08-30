@@ -92,15 +92,8 @@ public final class URLModuleCandidate implements ModuleCandidate {
     }
 
     @Override
-    public ClassLoader openClassLoader(ModuleLoadEnvironment environment, List<String> dependencies) {
-        return new ModuleClassLoader(
-                descriptor().id(),
-                url,
-                environment.apiLoader(),
-                environment.apiPackages(),
-                environment.exportRegistry(),
-                dependencies
-        );
+    public URL sourceUrl() {
+        return url;
     }
 
 }

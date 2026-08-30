@@ -1,14 +1,15 @@
-package me.bottdev.meshdi.moduleit.api.library;
+package me.bottdev.meshdi.moduleit.api;
 
-import me.bottdev.kern.commons.diagnostic.Diagnostics;
-import me.bottdev.meshdi.moduleit.api.diagnostic.LibraryLoadDiagnostic;
+import lombok.NonNull;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-public class ModuleLibraryLoader {
+/// Loads all libraries required by a module.
+public interface ModuleLibraryLoader {
 
-    CompletableFuture<Diagnostics<LibraryLoadDiagnostic>> {
-        
-    }
+    CompletableFuture<ModuleLibrariesResult> loadAll(
+            @NonNull List<ModuleHandle> handles
+    );
 
 }

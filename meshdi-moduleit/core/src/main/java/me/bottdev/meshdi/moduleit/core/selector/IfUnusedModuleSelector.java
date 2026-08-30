@@ -2,18 +2,18 @@ package me.bottdev.meshdi.moduleit.core.selector;
 
 import me.bottdev.meshdi.moduleit.api.ModuleHandle;
 import me.bottdev.meshdi.moduleit.api.ModuleManager;
-import me.bottdev.meshdi.moduleit.api.StartModuleSelector;
-import me.bottdev.meshdi.moduleit.api.StopModuleSelector;
+import me.bottdev.meshdi.moduleit.api.DependencyModuleSelector;
+import me.bottdev.meshdi.moduleit.api.DependentModuleSelector;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleSelectionException;
 
 import java.util.List;
 
-/// Implementation of [StartModuleSelector] and [StopModuleSelector] that can select module
+/// Implementation of [DependencyModuleSelector] and [DependentModuleSelector] that can select module
 /// only if there are no modules that depend on it.
-public class IfUnusedModuleSelector implements StartModuleSelector, StopModuleSelector {
+public class IfUnusedModuleSelector implements DependencyModuleSelector, DependentModuleSelector {
 
     @Override
-    public List<ModuleHandle> selectStart(String id, ModuleManager manager) throws ModuleSelectionException {
+    public List<ModuleHandle> selectDependencies(String id, ModuleManager manager) throws ModuleSelectionException {
         if (!manager.exists(id))
             throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
 
@@ -28,7 +28,7 @@ public class IfUnusedModuleSelector implements StartModuleSelector, StopModuleSe
     }
 
     @Override
-    public List<ModuleHandle> selectStop(String id, ModuleManager manager) throws ModuleSelectionException {
+    public List<ModuleHandle> selectDependents(String id, ModuleManager manager) throws ModuleSelectionException {
 
         if (!manager.exists(id))
             throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");

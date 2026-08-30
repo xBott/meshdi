@@ -1,12 +1,12 @@
 package me.bottdev.meshdi.moduleit.api.exceptions;
 
-public class ModuleLoadException extends ModuleException {
+public class ModulePrepareException extends ModuleException {
 
-    public ModuleLoadException(String message) {
+    public ModulePrepareException(String message) {
         super(message);
     }
 
-    public ModuleLoadException(String message, Throwable cause) {
+    public ModulePrepareException(String message, Throwable cause) {
         super(message, cause);
     }
 

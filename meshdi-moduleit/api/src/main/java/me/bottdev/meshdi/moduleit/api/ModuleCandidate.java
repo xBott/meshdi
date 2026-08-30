@@ -8,7 +8,7 @@ import me.bottdev.meshdi.moduleit.api.exceptions.ModuleDescriptorException;
 import java.util.List;
 
 /// Representation of module that may be loaded. Also, can be understood as a physical module.
-/// Allows to get [ModuleDescriptor] and open a new [ClassLoader].
+/// Allows to get [ModuleDescriptor] and the module's source URL.
 public interface ModuleCandidate extends VersionedDependencyAware<String> {
 
     /// @return a special key that identifies the candidate physically, e.g. path of the jar.
@@ -18,9 +18,8 @@ public interface ModuleCandidate extends VersionedDependencyAware<String> {
     /// @throws ModuleDescriptorException when an error occurred while reading module descriptor of the candidate
     ModuleDescriptor descriptor();
 
-    /// Opens a class loader for the candidate with an access to API and dependencies of the module.
-    /// @return a new class loader of the candidate
-    ClassLoader openClassLoader(ModuleLoadEnvironment environment, List<String> dependencies);
+    /// @return the URL pointing to the module's JAR file or primary source.
+    java.net.URL sourceUrl();
 
     @Override
     default String dependencyKey() {

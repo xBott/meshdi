@@ -18,51 +18,7 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
         ModuleStopDiagnostic.NothingStopped
 {
 
-    static ModuleStopDiagnostic incorrectState(
-            @NonNull String id
-    ) {
-        return new IncorrectState(id);
-    }
-
-    static ModuleStopDiagnostic meshUnregisterPlanFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshUnregisterPlanFailed(id, error);
-    }
-
-    static ModuleStopDiagnostic meshUnregisterExecuteFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshUnregisterExecutionFailed(id, error);
-    }
-
-    static ModuleStopDiagnostic forgetFailed(
-            @NonNull String id,
-            @NonNull Set<String> dependents
-    ) {
-        return new ForgetFailed(id, dependents);
-    }
-
-    static ModuleStopDiagnostic stopped(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Stopped(id, version);
-    }
-
-    static ModuleStopDiagnostic stoppedN(
-            int amount
-    ) {
-        return new StoppedN(amount);
-    }
-
-    static ModuleStopDiagnostic nothingStopped() {
-        return new NothingStopped();
-    }
-
-    record IncorrectState(String id) implements ModuleStopDiagnostic {
+    record IncorrectState(@NonNull String id) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -76,7 +32,10 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshUnregisterPlanFailed(String id, Throwable error) implements ModuleStopDiagnostic {
+    record MeshUnregisterPlanFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -90,7 +49,10 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshUnregisterExecutionFailed(String id, Throwable error) implements ModuleStopDiagnostic {
+    record MeshUnregisterExecutionFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -104,7 +66,10 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
     }
 
-    record ForgetFailed(String id, Set<String> dependents) implements ModuleStopDiagnostic {
+    record ForgetFailed(
+            @NonNull String id,
+            @NonNull Set<String> dependents
+    ) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -119,7 +84,10 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
 
     }
 
-    record Stopped(String id, SemVersion version) implements ModuleStopDiagnostic {
+    record Stopped(
+            @NonNull String id,
+            @NonNull SemVersion version
+    ) implements ModuleStopDiagnostic {
 
         @Override
         public DiagnosticType type() {

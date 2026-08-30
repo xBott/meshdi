@@ -2,20 +2,20 @@ package me.bottdev.meshdi.moduleit.core.selector;
 
 import me.bottdev.meshdi.moduleit.api.ModuleHandle;
 import me.bottdev.meshdi.moduleit.api.ModuleManager;
-import me.bottdev.meshdi.moduleit.api.StartModuleSelector;
-import me.bottdev.meshdi.moduleit.api.StopModuleSelector;
+import me.bottdev.meshdi.moduleit.api.DependencyModuleSelector;
+import me.bottdev.meshdi.moduleit.api.DependentModuleSelector;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/// Implementation of [StopModuleSelector] that
+/// Implementation of [DependentModuleSelector] that
 /// uses **DFS** to find cascade affected contexts in the mesh and returns
 /// a reversed sub-list of topologically sorted contexts.
-public class CascadeModuleSelector implements StartModuleSelector, StopModuleSelector {
+public class CascadeModuleSelector implements DependencyModuleSelector, DependentModuleSelector {
 
     @Override
-    public List<ModuleHandle> selectStart(String id, ModuleManager manager) {
+    public List<ModuleHandle> selectDependencies(String id, ModuleManager manager) {
 
         if (!manager.exists(id))
             throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
@@ -43,7 +43,7 @@ public class CascadeModuleSelector implements StartModuleSelector, StopModuleSel
     }
 
     @Override
-    public List<ModuleHandle> selectStop(String id, ModuleManager manager) {
+    public List<ModuleHandle> selectDependents(String id, ModuleManager manager) {
 
         if (!manager.exists(id))
             throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");

@@ -1,23 +1,13 @@
-package me.bottdev.meshdi.moduleit.api.exceptions;
+package me.bottdev.meshdi.moduleit.api.exceptions.library;
 
-import lombok.Getter;
+public class LibraryException extends Exception {
 
-@Getter
-public class LibraryFetchException extends ModuleException {
-
-    private final String id;
-    private final String url;
-
-    public LibraryFetchException(String id, String url, String message) {
+    public LibraryException(String message) {
         super(message);
-        this.id = id;
-        this.url = url;
     }
 
-    public LibraryFetchException(String id, String url, String message, Throwable cause) {
+    public LibraryException(String message, Throwable cause) {
         super(message, cause);
-        this.id = id;
-        this.url = url;
     }
 
 }

@@ -21,72 +21,7 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
         ModuleRestartDiagnostic.NothingRestarted
 {
 
-    static ModuleRestartDiagnostic incorrectState(
-            @NonNull String id
-    ) {
-        return new IncorrectState(id);
-    }
-
-    static ModuleRestartDiagnostic meshUnregisterPlanFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshUnregisterPlanFailed(id, error);
-    }
-
-    static ModuleRestartDiagnostic meshUnregisterExecuteFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshUnregisterExecutionFailed(id, error);
-    }
-
-    static ModuleRestartDiagnostic forgetFailed(
-            @NonNull String id,
-            @NonNull Set<String> dependents
-    ) {
-        return new ForgetFailed(id, dependents);
-    }
-
-    static ModuleRestartDiagnostic bootstrapFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new BootstrapFailed(id, error);
-    }
-
-    static ModuleRestartDiagnostic contextNotStarted(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new ContextNotStarted(id, error);
-    }
-
-    static ModuleRestartDiagnostic meshRegistrationFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshRegistrationFailed(id, error);
-    }
-
-    static ModuleRestartDiagnostic restarted(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Restarted(id, version);
-    }
-
-    static ModuleRestartDiagnostic restartedN(
-            int amount
-    ) {
-        return new RestartedN(amount);
-    }
-
-    static ModuleRestartDiagnostic nothingRestarted() {
-        return new NothingRestarted();
-    }
-
-    record IncorrectState(String id) implements ModuleRestartDiagnostic {
+    record IncorrectState(@NonNull String id) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -100,7 +35,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshUnregisterPlanFailed(String id, Throwable error) implements ModuleRestartDiagnostic {
+    record MeshUnregisterPlanFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -114,7 +52,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshUnregisterExecutionFailed(String id, Throwable error) implements ModuleRestartDiagnostic {
+    record MeshUnregisterExecutionFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -128,7 +69,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record ForgetFailed(String id, Set<String> dependents) implements ModuleRestartDiagnostic {
+    record ForgetFailed(
+            @NonNull String id,
+            @NonNull Set<String> dependents
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -143,7 +87,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record BootstrapFailed(String id, Throwable error) implements ModuleRestartDiagnostic {
+    record BootstrapFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -157,7 +104,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record ContextNotStarted(String id, Throwable error) implements ModuleRestartDiagnostic {
+    record ContextNotStarted(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -171,7 +121,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshRegistrationFailed(String id, Throwable error) implements ModuleRestartDiagnostic {
+    record MeshRegistrationFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -185,7 +138,10 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record Restarted(String id, SemVersion version) implements ModuleRestartDiagnostic {
+    record Restarted(
+            @NonNull String id,
+            @NonNull SemVersion version
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -199,7 +155,9 @@ public sealed interface ModuleRestartDiagnostic extends Diagnostic permits
 
     }
 
-    record RestartedN(int amount) implements ModuleRestartDiagnostic {
+    record RestartedN(
+            int amount
+    ) implements ModuleRestartDiagnostic {
 
         @Override
         public DiagnosticType type() {

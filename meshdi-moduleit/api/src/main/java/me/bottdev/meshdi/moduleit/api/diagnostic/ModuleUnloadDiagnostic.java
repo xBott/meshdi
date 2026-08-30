@@ -4,6 +4,7 @@ import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.Diagnostic;
 import me.bottdev.kern.commons.diagnostic.DiagnosticType;
 import me.bottdev.kern.version.SemVersion;
+import me.bottdev.meshdi.moduleit.api.ModuleState;
 
 import java.util.Set;
 
@@ -13,40 +14,17 @@ public sealed interface ModuleUnloadDiagnostic extends Diagnostic permits
         ModuleUnloadDiagnostic.ForgetFailed,
         ModuleUnloadDiagnostic.Unloaded,
         ModuleUnloadDiagnostic.UnloadedN,
-        ModuleUnloadDiagnostic.NothingUnloaded
+        ModuleUnloadDiagnostic.NothingUnloaded,
+        ModuleUnloadDiagnostic.Freed,
+        ModuleUnloadDiagnostic.Leaked,
+        ModuleUnloadDiagnostic.SkippedPersistent,
+        ModuleUnloadDiagnostic.LeakCheckDisabled
 {
 
-    static ModuleUnloadDiagnostic incorrectState(
-            @NonNull String id
-    ) {
-        return new IncorrectState(id);
-    }
-
-    static ModuleUnloadDiagnostic forgetFailed(
+    record IncorrectState(
             @NonNull String id,
-            @NonNull Set<String> dependents
-    ) {
-        return new ForgetFailed(id, dependents);
-    }
-
-    static ModuleUnloadDiagnostic unloaded(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Unloaded(id, version);
-    }
-
-    static ModuleUnloadDiagnostic unloadedN(
-            int amount
-    ) {
-        return new UnloadedN(amount);
-    }
-
-    static ModuleUnloadDiagnostic nothingUnloaded() {
-        return new NothingUnloaded();
-    }
-
-    record IncorrectState(String id) implements ModuleUnloadDiagnostic {
+            @NonNull ModuleState actualState
+    ) implements ModuleUnloadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -55,12 +33,15 @@ public sealed interface ModuleUnloadDiagnostic extends Diagnostic permits
 
         @Override
         public String message() {
-            return "Module \"" + id + "\" must have loaded or stopped state.";
+            return "Module must be just loaded or stopped: " + id + ". Actual state: " + actualState;
         }
 
     }
 
-    record ForgetFailed(String id, Set<String> dependents) implements ModuleUnloadDiagnostic {
+    record ForgetFailed(
+            @NonNull String id,
+            @NonNull Set<String> dependents
+    ) implements ModuleUnloadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -75,7 +56,10 @@ public sealed interface ModuleUnloadDiagnostic extends Diagnostic permits
 
     }
 
-    record Unloaded(String id, SemVersion version) implements ModuleUnloadDiagnostic {
+    record Unloaded(
+            @NonNull String id,
+            @NonNull SemVersion version
+    ) implements ModuleUnloadDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -115,6 +99,54 @@ public sealed interface ModuleUnloadDiagnostic extends Diagnostic permits
             return "No modules unloaded.";
         }
 
+    }
+
+    record Freed(@NonNull String id) implements ModuleUnloadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "Module classloader successfully freed from JVM heap: " + id;
+        }
+    }
+
+    record Leaked(@NonNull String id, @NonNull Throwable error) implements ModuleUnloadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.ERROR;
+        }
+
+        @Override
+        public String message() {
+            return "Module classloader leaked in JVM heap: " + id + " (" + error.getMessage() + ")";
+        }
+    }
+
+    record SkippedPersistent(@NonNull String id) implements ModuleUnloadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "Module unload skipped (module is persistent): " + id;
+        }
+    }
+
+    record LeakCheckDisabled(@NonNull String id) implements ModuleUnloadDiagnostic {
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.INFO;
+        }
+
+        @Override
+        public String message() {
+            return "Module classloader leak check disabled: " + id;
+        }
     }
 
 }

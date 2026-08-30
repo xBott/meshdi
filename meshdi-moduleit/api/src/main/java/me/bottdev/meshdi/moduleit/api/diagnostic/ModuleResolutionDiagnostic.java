@@ -8,44 +8,15 @@ import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
 
 /// Type of [ModuleDiagnostic] for loading of modules.
-public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
-        ModuleLoadDiagnostic.AlreadyLoaded,
-        ModuleLoadDiagnostic.Duplicate,
-        ModuleLoadDiagnostic.ApiVersionMismatch,
-        ModuleLoadDiagnostic.BadResolution,
-        ModuleLoadDiagnostic.Loaded
+public sealed interface ModuleResolutionDiagnostic extends ModuleDiagnostic permits
+        ModuleResolutionDiagnostic.AlreadyLoaded,
+        ModuleResolutionDiagnostic.Duplicate,
+        ModuleResolutionDiagnostic.ApiVersionMismatch,
+        ModuleResolutionDiagnostic.BadResolution,
+        ModuleResolutionDiagnostic.Resolved
 {
 
-    static ModuleLoadDiagnostic alreadyLoaded(@NonNull String id) {
-        return new AlreadyLoaded(id);
-    }
-
-    static ModuleLoadDiagnostic duplicate(@NonNull String id) {
-        return new Duplicate(id);
-    }
-
-    static ModuleLoadDiagnostic apiVersionMismatch(
-            @NonNull String id,
-            @NonNull VersionRange range,
-            @NonNull SemVersion actual
-    ) {
-        return new ApiVersionMismatch(id, range, actual);
-    }
-
-    static ModuleLoadDiagnostic badResolution(
-            @NonNull Diagnostics<DependencyDiagnostic> diagnostics
-    ) {
-        return new BadResolution(diagnostics);
-    }
-
-    static ModuleLoadDiagnostic loaded(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Loaded(id, version);
-    }
-
-    record AlreadyLoaded(String id) implements ModuleLoadDiagnostic {
+    record AlreadyLoaded(@NonNull String id) implements ModuleResolutionDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -59,7 +30,7 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
     }
 
-    record Duplicate(String id) implements ModuleLoadDiagnostic {
+    record Duplicate(@NonNull String id) implements ModuleResolutionDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -73,7 +44,11 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
     }
 
-    record ApiVersionMismatch(String id, VersionRange range, SemVersion actual) implements ModuleLoadDiagnostic {
+    record ApiVersionMismatch(
+            @NonNull String id,
+            @NonNull VersionRange range,
+            @NonNull SemVersion actual
+    ) implements ModuleResolutionDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -87,7 +62,9 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
     }
 
-    record BadResolution(Diagnostics<DependencyDiagnostic> diagnostics) implements ModuleLoadDiagnostic {
+    record BadResolution(
+            @NonNull Diagnostics<DependencyDiagnostic> diagnostics
+    ) implements ModuleResolutionDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -101,7 +78,10 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
     }
 
-    record Loaded(String id, SemVersion version) implements ModuleLoadDiagnostic {
+    record Resolved(
+            @NonNull String id,
+            @NonNull SemVersion version
+    ) implements ModuleResolutionDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -110,7 +90,7 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
 
         @Override
         public String message() {
-            return "Successfully loaded module: " + id + " " + version;
+            return "Successfully resolved module: " + id + " " + version;
         }
 
     }

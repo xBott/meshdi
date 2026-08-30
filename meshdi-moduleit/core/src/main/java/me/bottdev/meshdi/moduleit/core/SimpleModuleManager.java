@@ -1,6 +1,8 @@
 package me.bottdev.meshdi.moduleit.core;
 
+import lombok.Builder;
 import lombok.NonNull;
+import me.bottdev.kern.commons.diagnostic.DiagnosticType;
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
 import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
 import me.bottdev.kern.commons.diagnostic.ListDiagnostics;
@@ -10,47 +12,82 @@ import me.bottdev.kern.dependency.DependentContainer;
 import me.bottdev.kern.dependency.ResolutionResult;
 import me.bottdev.kern.dependency.StatefulDependencyResolver;
 import me.bottdev.kern.dependency.containers.SimpleDependentContainer;
-import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
-import me.bottdev.meshdi.api.Context;
-import me.bottdev.meshdi.api.exceptions.ContextBuildException;
-import me.bottdev.meshdi.api.exceptions.ContextStartException;
-import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
-import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
-import me.bottdev.meshdi.api.exceptions.mesh.MeshUnregisterExecuteException;
-import me.bottdev.meshdi.core.SimpleContextBootstrap;
-import me.bottdev.meshdi.core.mesh.DagContextMesh;
-import me.bottdev.meshdi.core.mesh.MeshContextSelectionStrategies;
+import me.bottdev.meshdi.api.ContextMesh;
 import me.bottdev.meshdi.moduleit.api.*;
 import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.*;
+import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import me.bottdev.meshdi.moduleit.api.classprovider.ClassProvider;
+import me.bottdev.meshdi.moduleit.api.classprovider.ClassProviderContainer;
+import me.bottdev.meshdi.moduleit.core.classprovider.ApiClassProvider;
+import me.bottdev.meshdi.moduleit.core.classprovider.ExportRegistryClassProvider;
+import me.bottdev.meshdi.moduleit.core.classprovider.IsolatedLibraryClassProvider;
+import me.bottdev.meshdi.moduleit.core.classprovider.PlatformClassProvider;
+import me.bottdev.meshdi.moduleit.core.classprovider.SharedLibraryClassProvider;
+import java.net.URLClassLoader;
 
 public class SimpleModuleManager implements ModuleManager {
 
     private final StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver;
     private final ModuleLoadEnvironment environment;
+    private final ModuleLibraryLoader libraryLoader;
+    private final ContextMesh contextMesh;
     private final ModuleClassLoaderLeakDetector leakDetector;
 
-    private final LinkedHashMap<String, SimpleModuleHandle> handles = new LinkedHashMap<>();
-    private final DagContextMesh contextMesh = new DagContextMesh();
+    private final LinkedHashMap<String, InternalModuleHandle> handles = new LinkedHashMap<>();
+    private final Set<Path> sharedLibraries = new HashSet<>();
+    private URLClassLoader sharedLibraryLoader = new URLClassLoader(new URL[0], null);
 
+    @Builder
     public SimpleModuleManager(
             @NonNull StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver,
             @NonNull ModuleLoadEnvironment environment,
+            @NonNull ModuleLibraryLoader libraryLoader,
+            @NonNull ContextMesh contextMesh,
             @NonNull ModuleClassLoaderLeakDetector leakDetector
     ) {
-        this.dependencyResolver = dependencyResolver;
         this.environment = environment;
+        this.dependencyResolver = dependencyResolver;
+        this.libraryLoader = libraryLoader;
+        this.contextMesh = contextMesh;
         this.leakDetector = leakDetector;
     }
 
+    ContextMesh contextMesh() { return contextMesh; }
+    StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver() { return dependencyResolver; }
+    void removeHandle(String id) { handles.remove(id); }
+
+    public void addSharedLibraries(Collection<Path> paths) {
+        sharedLibraries.addAll(paths);
+        rebuildSharedLibraryLoader();
+    }
+
+    private void rebuildSharedLibraryLoader() {
+        if (sharedLibraryLoader != null) {
+            try {
+                sharedLibraryLoader.close();
+            } catch (IOException ignored) {}
+        }
+        
+        List<URL> validUrls = new ArrayList<>();
+        for (Path path : sharedLibraries) {
+            try {
+                validUrls.add(path.toUri().toURL());
+            } catch (MalformedURLException ignored) {}
+        }
+        
+        this.sharedLibraryLoader = new URLClassLoader(validUrls.toArray(new URL[0]), null);
+    }
 
     @Override
     public ModuleLoadEnvironment environment() {
@@ -95,9 +132,9 @@ public class SimpleModuleManager implements ModuleManager {
                 .toList();
     }
 
-    private Collection<ModuleCandidate> prepareCandidates(
+    private Collection<ModuleCandidate> resolveUniqueCandidates(
             List<ModuleCandidate> candidates,
-            DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder
+            DiagnosticsBuilder<ModuleResolutionDiagnostic> diagnosticsBuilder
     ) {
 
         Map<String, ModuleCandidate> uniqueCandidates = new HashMap<>();
@@ -109,17 +146,17 @@ public class SimpleModuleManager implements ModuleManager {
             VersionRange requiredApiVersion = descriptor.apiVersion();
 
             if (exists(moduleId)) {
-                diagnosticsBuilder.append(ModuleLoadDiagnostic.alreadyLoaded(moduleId));
+                diagnosticsBuilder.append(new ModuleResolutionDiagnostic.AlreadyLoaded(moduleId));
                 continue;
             }
 
             if (uniqueCandidates.containsKey(moduleId)) {
-                diagnosticsBuilder.append(ModuleLoadDiagnostic.duplicate(moduleId));
+                diagnosticsBuilder.append(new ModuleResolutionDiagnostic.Duplicate(moduleId));
                 continue;
             }
 
             if (!requiredApiVersion.satisfies(environment.apiVersion())) {
-                diagnosticsBuilder.append(ModuleLoadDiagnostic.apiVersionMismatch(
+                diagnosticsBuilder.append(new ModuleResolutionDiagnostic.ApiVersionMismatch(
                         moduleId,
                         requiredApiVersion,
                         environment.apiVersion())
@@ -134,9 +171,9 @@ public class SimpleModuleManager implements ModuleManager {
         return uniqueCandidates.values();
     }
 
-    private DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleLoadDiagnostic> resolveCandidates(
+    private DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleResolutionDiagnostic> resolveDependencies(
             Collection<ModuleCandidate> uniqueCandidates,
-            DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder
+            DiagnosticsBuilder<ModuleResolutionDiagnostic> diagnosticsBuilder
     ) {
 
         DependentContainer<String, ModuleCandidate> container = SimpleDependentContainer.<String, ModuleCandidate>builder()
@@ -150,7 +187,7 @@ public class SimpleModuleManager implements ModuleManager {
             return DiagnosticResult.success(diagnosticResult.unwrap(), diagnosticsBuilder.build());
 
         } else {
-            diagnosticsBuilder.append(ModuleLoadDiagnostic.badResolution(diagnosticResult.unwrapDiagnostics()));
+            diagnosticsBuilder.append(new ModuleResolutionDiagnostic.BadResolution(diagnosticResult.unwrapDiagnostics()));
             return DiagnosticResult.failure(diagnosticsBuilder.build());
 
         }
@@ -158,15 +195,15 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public Diagnostics<ModuleLoadDiagnostic> load(ModuleRepository repository) throws CandidateListException {
+    public Diagnostics<ModuleResolutionDiagnostic> resolve(ModuleRepository repository) throws CandidateListException {
 
         List<ModuleCandidate> candidates = repository.candidates();
 
-        DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+        DiagnosticsBuilder<ModuleResolutionDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
 
-        Collection<ModuleCandidate> uniqueCandidates = prepareCandidates(candidates, diagnosticsBuilder);
-        DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleLoadDiagnostic> diagnosticResult =
-                resolveCandidates(uniqueCandidates, diagnosticsBuilder);
+        Collection<ModuleCandidate> uniqueCandidates = resolveUniqueCandidates(candidates, diagnosticsBuilder);
+        DiagnosticResult<ResolutionResult<String, ModuleCandidate>, ModuleResolutionDiagnostic> diagnosticResult =
+                resolveDependencies(uniqueCandidates, diagnosticsBuilder);
 
         if (!diagnosticResult.isPresent()) {
             return diagnosticResult.unwrapDiagnostics();
@@ -179,90 +216,157 @@ public class SimpleModuleManager implements ModuleManager {
             ModuleDescriptor descriptor = candidate.descriptor();
             String moduleId = descriptor.id();
             SemVersion version = descriptor.version();
-            List<String> dependencyIds = descriptor.getVersionedDependencies().stream()
-                    .map(VersionedDependencyRequest::key)
-                    .toList();
-            Set<String> exports = descriptor.exports();
 
-            ClassLoader classLoader = candidate.openClassLoader(environment, dependencyIds);
-            SimpleModuleHandle handle = new SimpleModuleHandle(candidate, classLoader);
-
+            InternalModuleHandle handle;
+            if (candidate instanceof InternalModuleCandidate internalCandidate) {
+                handle = internalCandidate.createHandle();
+            } else {
+                handle = SimpleModuleHandle.ofResolved(candidate);
+            }
+            
             handles.put(moduleId, handle);
-            environment.exportRegistry().register(moduleId, exports, classLoader);
 
-            diagnosticsBuilder.append(ModuleLoadDiagnostic.loaded(moduleId, version));
+            diagnosticsBuilder.append(new ModuleResolutionDiagnostic.Resolved(moduleId, version));
 
         }
 
         return diagnosticsBuilder.build();
+    }
+
+    private CompletableFuture<Diagnostics<LibraryLoadDiagnostic>> prepareBatch(List<ModuleHandle> toPrepare) {
+
+        List<ModuleHandle> resolved = toPrepare.stream()
+                .filter(handle -> handle.state() == ModuleState.RESOLVED)
+                .toList();
+
+        return libraryLoader.loadAll(resolved).thenApply(result -> {
+
+            boolean hasErrors = result.diagnostics().has(DiagnosticType.ERROR);
+
+            if (hasErrors) {
+                return result.diagnostics();
+            }
+
+            addSharedLibraries(result.sharedLibraries());
+
+            for (ModuleHandle handle : resolved) {
+                InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
+                List<Path> libraries = result.isolatedLibraries().getOrDefault(handle, List.of());
+                internalHandle.completePreparation(libraries);
+            }
+
+            return result.diagnostics();
+
+        });
 
     }
 
-    private void handleStartError(ModuleHandle handle) {
-        if (handle instanceof SimpleModuleHandle simpleHandle) {
-            simpleHandle.setContext(null);
-            simpleHandle.setState(ModuleState.START_FAILED);
+    @Override
+    public ModuleBatchCommand<CompletableFuture<Diagnostics<LibraryLoadDiagnostic>>> prepare(
+            String id,
+            DependencyModuleSelector selector
+    ) throws ModulePrepareException {
+
+        if (!exists(id))
+            throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
+
+        try {
+            List<ModuleHandle> toPrepare = selector.selectDependencies(id, this);
+
+            return new AbstractModuleBatchCommand<>(toPrepare) {
+                @Override
+                public CompletableFuture<Diagnostics<LibraryLoadDiagnostic>> confirm() {
+                    return prepareBatch(handles);
+                }
+            };
+
+        } catch (ModuleSelectionException ex) {
+            throw new ModulePrepareException("Failed to select module group.", ex);
+
         }
+
     }
 
-    private boolean start(
-            ModuleHandle handle,
-            DiagnosticsBuilder<ModuleStartDiagnostic> diagnosticsBuilder
-    ) {
+    @Override
+    public CompletableFuture<Diagnostics<LibraryLoadDiagnostic>> prepareAll() {
+        return prepareBatch(getHandles());
+    }
 
+    ModuleClassLoader createClassLoader(ModuleHandle handle) throws MalformedURLException {
         ModuleDescriptor descriptor = handle.descriptor();
         String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
 
-        ModuleState currentState = handle.state();
-        if (currentState != ModuleState.LOADED && currentState != ModuleState.STOPPED) {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.incorrectState(moduleId, currentState));
-            return false;
+        List<URL> isolatedUrls = new ArrayList<>();
+        for (Path libPath : handle.libraries()) {
+            isolatedUrls.add(libPath.toUri().toURL());
         }
 
-        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
-        simpleHandle.setState(ModuleState.STARTING);
+        List<ClassProvider> providers = new ArrayList<>();
+        providers.add(new PlatformClassProvider());
+        providers.add(new ApiClassProvider(environment.apiLoader(), environment.apiPackages()));
+        providers.add(new ExportRegistryClassProvider(moduleId, environment.exportRegistry()));
+        providers.add(new SharedLibraryClassProvider(sharedLibraryLoader));
+        providers.add(new IsolatedLibraryClassProvider(isolatedUrls.toArray(new URL[0])));
 
-        boolean success = false;
-        try {
-            Context moduleContext = SimpleContextBootstrap.bootstrap(handle.classLoader())
-                    .id(descriptor.id())
-                    .build();
+        List<String> dependencyIds = descriptor.getVersionedDependencies().stream()
+                .map(VersionedDependencyRequest::key)
+                .toList();
 
-            List<String> sees = descriptor.getVersionedDependencies().stream()
-                    .map(VersionedDependencyRequest::key)
-                    .toList();
-
-            DagContextMesh.DagMeshRegistration registration = new DagContextMesh.DagMeshRegistration(moduleContext, sees);
-            Context meshViewContext = contextMesh.register(registration);
-            meshViewContext.start();
-
-            simpleHandle.setContext(meshViewContext);
-            simpleHandle.setState(ModuleState.STARTED);
-
-            success = true;
-
-        } catch (ContextBuildException ex) {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.bootstrapFailed(moduleId, ex));
-
-        } catch (ContextStartException ex) {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.contextNotStarted(moduleId, ex));
-
-        } catch (MeshRegisterException ex) {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.meshRegistrationFailed(moduleId, ex));
-
-        }
-
-        if (!success) {
-            handleStartError(simpleHandle);
-            return false;
-        }
-
-        diagnosticsBuilder.append(ModuleStartDiagnostic.started(moduleId, version));
-
-        return true;
-
+        return new ModuleClassLoader(
+                moduleId,
+                new URL[]{ handle.candidate().sourceUrl() },
+                new ClassProviderContainer(providers),
+                dependencyIds
+        );
     }
+
+
+    private Diagnostics<ModuleLoadDiagnostic> loadBatch(List<ModuleHandle> toLoad) {
+
+        DiagnosticsBuilder<ModuleLoadDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
+        int loaded = 0;
+
+        for (ModuleHandle handle : toLoad) {
+            InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
+            if (internalHandle.doLoad(this, diagnosticsBuilder)) {
+                loaded++;
+            }
+        }
+
+        if (loaded > 0) {
+            diagnosticsBuilder.append(new ModuleLoadDiagnostic.LoadedN(loaded));
+        } else {
+            diagnosticsBuilder.append(new ModuleLoadDiagnostic.NothingLoaded());
+        }
+
+        return diagnosticsBuilder.build();
+    }
+
+    @Override
+    public ModuleBatchCommand<Diagnostics<ModuleLoadDiagnostic>> load(String id, DependencyModuleSelector selector) throws ModuleLoadException {
+        if (!exists(id))
+            throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
+
+        try {
+            List<ModuleHandle> toLoad = selector.selectDependencies(id, this);
+
+            return new AbstractModuleBatchCommand<>(toLoad) {
+                @Override
+                public Diagnostics<ModuleLoadDiagnostic> confirm() {
+                    return loadBatch(toLoad);
+                }
+            };
+
+        } catch (ModuleSelectionException ex) {
+            throw new ModuleLoadException("Failed to select module group.", ex);
+        }
+    }
+
+    @Override
+    public Diagnostics<ModuleLoadDiagnostic> loadAll() {
+        return loadBatch(getHandles());
+    }
+
 
     private Diagnostics<ModuleStartDiagnostic> startBatch(List<ModuleHandle> toStart) {
 
@@ -270,15 +374,16 @@ public class SimpleModuleManager implements ModuleManager {
 
         int started = 0;
         for (ModuleHandle handle : toStart) {
-            if (start(handle, diagnosticsBuilder)) started++;
+            InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
+            if (internalHandle.doStart(this, diagnosticsBuilder)) started++;
 
         }
 
         if (started > 0) {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.startedN(started));
+            diagnosticsBuilder.append(new ModuleStartDiagnostic.StartedN(started));
 
         } else {
-            diagnosticsBuilder.append(ModuleStartDiagnostic.nothingStarted());
+            diagnosticsBuilder.append(new ModuleStartDiagnostic.NothingStarted());
 
         }
 
@@ -287,7 +392,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public ModuleBatchCommand<Diagnostics<ModuleStartDiagnostic>> start(String id, StartModuleSelector selector) throws
+    public ModuleBatchCommand<Diagnostics<ModuleStartDiagnostic>> start(String id, DependencyModuleSelector selector) throws
             ModuleStartException
     {
         if (!exists(id))
@@ -295,7 +400,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         try {
 
-            List<ModuleHandle> toStart = selector.selectStart(id, this);
+            List<ModuleHandle> toStart = selector.selectDependencies(id, this);
 
             return new AbstractModuleBatchCommand<>(toStart) {
                 @Override
@@ -316,60 +421,6 @@ public class SimpleModuleManager implements ModuleManager {
         return startBatch(getHandles());
     }
 
-    private void handleStopError(ModuleHandle handle) {
-        if (handle instanceof SimpleModuleHandle simpleHandle) {
-            simpleHandle.setContext(null);
-            simpleHandle.setState(ModuleState.STOP_FAILED);
-        }
-    }
-
-    private boolean stop(
-            ModuleHandle handle,
-            DiagnosticsBuilder<ModuleStopDiagnostic> diagnosticsBuilder
-    ) {
-
-        ModuleDescriptor descriptor = handle.descriptor();
-        String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
-
-        if (handle.state() != ModuleState.STARTED) {
-            diagnosticsBuilder.append(ModuleStopDiagnostic.incorrectState(moduleId));
-            return false;
-        }
-
-        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
-        simpleHandle.setState(ModuleState.STOPPING);
-
-        Context context = simpleHandle.context();
-        String contextId = context.getId();
-
-        boolean success = false;
-        try {
-            contextMesh.planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
-            context.dispose();
-
-            simpleHandle.setState(ModuleState.STOPPED);
-            simpleHandle.setContext(null);
-
-            success = true;
-
-        } catch (MeshUnregisterExecuteException ex) {
-            diagnosticsBuilder.append(ModuleStopDiagnostic.meshUnregisterExecuteFailed(moduleId, ex));
-
-        } catch (MeshContextSelectionException ex) {
-            diagnosticsBuilder.append(ModuleStopDiagnostic.meshUnregisterPlanFailed(moduleId, ex));
-
-        }
-
-        if (!success) {
-            handleStopError(simpleHandle);
-            return false;
-        }
-
-        diagnosticsBuilder.append(ModuleStopDiagnostic.stopped(moduleId, version));
-
-        return true;
-    }
 
     private Diagnostics<ModuleStopDiagnostic> stopBatch(List<ModuleHandle> toStop) {
 
@@ -377,15 +428,16 @@ public class SimpleModuleManager implements ModuleManager {
 
         int stopped = 0;
         for (ModuleHandle handle : toStop) {
-            if (stop(handle, diagnosticsBuilder)) stopped++;
+            InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
+            if (internalHandle.doStop(this, diagnosticsBuilder)) stopped++;
 
         }
 
         if (stopped > 0) {
-            diagnosticsBuilder.append(ModuleStopDiagnostic.stoppedN(stopped));
+            diagnosticsBuilder.append(new ModuleStopDiagnostic.StoppedN(stopped));
 
         } else {
-            diagnosticsBuilder.append(ModuleStopDiagnostic.nothingStopped());
+            diagnosticsBuilder.append(new ModuleStopDiagnostic.NothingStopped());
 
         }
 
@@ -394,7 +446,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, StopModuleSelector selector)
+    public ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(String id, DependentModuleSelector selector)
             throws ModuleStopException
     {
 
@@ -403,7 +455,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         try {
 
-            List<ModuleHandle> toStop = selector.selectStop(id, this);
+            List<ModuleHandle> toStop = selector.selectDependents(id, this);
 
             return new AbstractModuleBatchCommand<>(toStop) {
                 @Override
@@ -424,113 +476,68 @@ public class SimpleModuleManager implements ModuleManager {
         return stopBatch(getHandles().reversed());
     }
 
-    private void handleUnloadError(ModuleHandle handle) {
-        if (handle instanceof SimpleModuleHandle simpleHandle) {
-            simpleHandle.setContext(null);
-            simpleHandle.setState(ModuleState.UNLOAD_FAILED);
-        }
-    }
 
-    private CompletableFuture<ModuleUnloadGCReport> unload(
-            ModuleHandle handle,
-            DiagnosticsBuilder<ModuleUnloadDiagnostic> diagnosticsBuilder
-    ) {
-
-        ModuleDescriptor descriptor = handle.descriptor();
-        String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
-
-        ModuleState state = handle.state();
-        if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
-            diagnosticsBuilder.append(ModuleUnloadDiagnostic.incorrectState(moduleId));
-
-            return CompletableFuture.completedFuture(ModuleUnloadGCReport.notUnloaded(moduleId));
-        }
-
-        SimpleModuleHandle simpleHandle = (SimpleModuleHandle) handle;
-        simpleHandle.setState(ModuleState.UNLOADING);
-
-        boolean success = false;
-        try {
-            dependencyResolver.state().forget(moduleId);
-            environment.exportRegistry().unregister(moduleId);
-            handles.remove(moduleId);
-
-            success = true;
-
-        } catch (ResolverForgetException ex) {
-            diagnosticsBuilder.append(ModuleUnloadDiagnostic.forgetFailed(moduleId, ex.getDependents()));
-
-        }
-
-        if (!success) {
-            handleUnloadError(simpleHandle);
-
-            return CompletableFuture.completedFuture(ModuleUnloadGCReport.notUnloaded(moduleId));
-
-        }
-
-        ClassLoader unloadedClassLoader = handle.classLoader();
-        simpleHandle.setClassLoader(null);
-
-        leakDetector.track(moduleId, unloadedClassLoader);
-
-
-        diagnosticsBuilder.append(ModuleUnloadDiagnostic.unloaded(moduleId, version));
-
-        return leakDetector.awaitUnloadAsync(moduleId, Duration.of(5, ChronoUnit.SECONDS))
-                .thenApply(_ -> ModuleUnloadGCReport.success(moduleId))
-                .exceptionally(ex -> ModuleUnloadGCReport.leaked(moduleId, ex));
-
-    }
-
-    private ModuleUnloadResult unloadBatch(List<ModuleHandle> toUnload) {
+    private CompletableFuture<Diagnostics<ModuleUnloadDiagnostic>> unloadBatch(List<ModuleHandle> toUnload) {
         DiagnosticsBuilder<ModuleUnloadDiagnostic> diagnosticsBuilder = ListDiagnostics.builder();
-        List<CompletableFuture<ModuleUnloadGCReport>> futures = new ArrayList<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
 
         int unloaded = 0;
 
         for (ModuleHandle handle : toUnload) {
+            String moduleId = handle.descriptor().id();
 
-            CompletableFuture<ModuleUnloadGCReport> reportFuture = unload(handle, diagnosticsBuilder);
-            futures.add(reportFuture);
+            if (handle.isPersistent()) {
+                diagnosticsBuilder.append(new ModuleUnloadDiagnostic.SkippedPersistent(moduleId));
+                continue;
+            }
+
+            InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
+            CompletableFuture<Void> future = internalHandle.doUnload(this, diagnosticsBuilder)
+                    .thenAccept(result -> {
+                        switch (result) {
+                            case LeakDetectorResult.Freed _ ->
+                                    diagnosticsBuilder.append(new ModuleUnloadDiagnostic.Freed(moduleId));
+                            case LeakDetectorResult.Disabled _ ->
+                                    diagnosticsBuilder.append(new ModuleUnloadDiagnostic.LeakCheckDisabled(moduleId));
+                            case LeakDetectorResult.Leaked leaked ->
+                                    diagnosticsBuilder.append(new ModuleUnloadDiagnostic.Leaked(moduleId, leaked.error()));
+                        }
+                    });
+            futures.add(future);
 
             unloaded++;
 
         }
 
         if (unloaded > 0) {
-            diagnosticsBuilder.append(ModuleUnloadDiagnostic.unloadedN(unloaded));
+            diagnosticsBuilder.append(new ModuleUnloadDiagnostic.UnloadedN(unloaded));
 
         } else {
-            diagnosticsBuilder.append(ModuleUnloadDiagnostic.nothingUnloaded());
+            diagnosticsBuilder.append(new ModuleUnloadDiagnostic.NothingUnloaded());
 
         }
 
-        CompletableFuture<List<ModuleUnloadGCReport>> gcFuture =
-                CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .thenApply(_ -> futures.stream().map(CompletableFuture::join).toList());
-
-        return new SimpleModuleUnloadResult(
-                diagnosticsBuilder.build(),
-                gcFuture
-        );
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                        .thenApply(_ -> diagnosticsBuilder.build());
     }
 
     @Override
-    public ModuleBatchCommand<ModuleUnloadResult> unload(String id, StopModuleSelector selector) throws ModuleUnloadException {
+    public ModuleBatchCommand<CompletableFuture<Diagnostics<ModuleUnloadDiagnostic>>> unload(
+            String id,
+            DependentModuleSelector selector
+    ) throws ModuleUnloadException {
 
         if (!exists(id))
             throw new IllegalArgumentException("Module \"" + id + "\" does not exist.");
 
         try {
 
-            List<ModuleHandle> toUnload = selector.selectStop(id, this);
+            List<ModuleHandle> toUnload = selector.selectDependents(id, this);
 
             return new AbstractModuleBatchCommand<>(toUnload) {
 
                 @Override
-                public ModuleUnloadResult confirm() {
+                public CompletableFuture<Diagnostics<ModuleUnloadDiagnostic>> confirm() {
                     return unloadBatch(handles);
                 }
 
@@ -544,7 +551,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public ModuleUnloadResult unloadAll() {
+    public CompletableFuture<Diagnostics<ModuleUnloadDiagnostic>> unloadAll() {
         return unloadBatch(getHandles().reversed());
     }
 
@@ -558,13 +565,13 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleRestartDiagnostic restartDiagnostic = switch (stopDiagnostic) {
                 case ModuleStopDiagnostic.IncorrectState notStarted ->
-                        ModuleRestartDiagnostic.incorrectState(notStarted.id());
+                        new ModuleRestartDiagnostic.IncorrectState(notStarted.id());
                 case ModuleStopDiagnostic.MeshUnregisterPlanFailed planFailed ->
-                        ModuleRestartDiagnostic.meshUnregisterPlanFailed(planFailed.id(), planFailed.error());
+                        new ModuleRestartDiagnostic.MeshUnregisterPlanFailed(planFailed.id(), planFailed.error());
                 case ModuleStopDiagnostic.MeshUnregisterExecutionFailed executionFailed ->
-                        ModuleRestartDiagnostic.meshUnregisterExecuteFailed(executionFailed.id(), executionFailed.error());
+                        new ModuleRestartDiagnostic.MeshUnregisterExecutionFailed(executionFailed.id(), executionFailed.error());
                 case ModuleStopDiagnostic.ForgetFailed forgetFailed ->
-                        ModuleRestartDiagnostic.forgetFailed(forgetFailed.id(), forgetFailed.dependents());
+                        new ModuleRestartDiagnostic.ForgetFailed(forgetFailed.id(), forgetFailed.dependents());
                 default -> null;
             };
             if (restartDiagnostic != null) diagnosticsBuilder.append(restartDiagnostic);
@@ -583,17 +590,17 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleRestartDiagnostic restartDiagnostic = switch (startDiagnostic) {
                 case ModuleStartDiagnostic.BootstrapFailed bootstrapFailed ->
-                        ModuleRestartDiagnostic.bootstrapFailed(bootstrapFailed.id(), bootstrapFailed.error());
+                        new ModuleRestartDiagnostic.BootstrapFailed(bootstrapFailed.id(), bootstrapFailed.error());
                 case ModuleStartDiagnostic.ContextNotStarted notStarted ->
-                        ModuleRestartDiagnostic.contextNotStarted(notStarted.id(), notStarted.error());
+                        new ModuleRestartDiagnostic.ContextNotStarted(notStarted.id(), notStarted.error());
                 case ModuleStartDiagnostic.MeshRegistrationFailed registrationFailed ->
-                        ModuleRestartDiagnostic.meshRegistrationFailed(registrationFailed.id(), registrationFailed.error());
+                        new ModuleRestartDiagnostic.MeshRegistrationFailed(registrationFailed.id(), registrationFailed.error());
                 case ModuleStartDiagnostic.Started started ->
-                        ModuleRestartDiagnostic.restarted(started.id(), started.version());
+                        new ModuleRestartDiagnostic.Restarted(started.id(), started.version());
                 case ModuleStartDiagnostic.StartedN startedN ->
-                        ModuleRestartDiagnostic.restartedN(startedN.amount());
+                        new ModuleRestartDiagnostic.RestartedN(startedN.amount());
                 case ModuleStartDiagnostic.NothingStarted _ ->
-                        ModuleRestartDiagnostic.nothingRestarted();
+                        new ModuleRestartDiagnostic.NothingRestarted();
                 default -> null;
             };
             if (restartDiagnostic != null) diagnosticsBuilder.append(restartDiagnostic);
@@ -612,7 +619,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     @Override
-    public ModuleBatchCommand<Diagnostics<ModuleRestartDiagnostic>> restart(String id, StopModuleSelector selector)
+    public ModuleBatchCommand<Diagnostics<ModuleRestartDiagnostic>> restart(String id, DependentModuleSelector selector)
             throws ModuleRestartException
     {
 
@@ -621,7 +628,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         try {
 
-            List<ModuleHandle> toRestart = selector.selectStop(id, this);
+            List<ModuleHandle> toRestart = selector.selectDependents(id, this);
 
             return new AbstractModuleBatchCommand<>(toRestart) {
                 @Override

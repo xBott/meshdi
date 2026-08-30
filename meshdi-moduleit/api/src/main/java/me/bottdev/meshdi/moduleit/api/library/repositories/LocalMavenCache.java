@@ -1,4 +1,4 @@
-package me.bottdev.meshdi.moduleit.core.library;
+package me.bottdev.meshdi.moduleit.api.library.repositories;
 
 import lombok.NonNull;
 import me.bottdev.meshdi.moduleit.api.library.MavenCoordinate;
@@ -7,6 +7,7 @@ import me.bottdev.meshdi.moduleit.api.library.MavenRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public class LocalMavenCache implements MavenRepository {
 
@@ -31,6 +32,11 @@ public class LocalMavenCache implements MavenRepository {
     @Override
     public Optional<Path> fetchArtifact(MavenCoordinate coordinate) {
         return fetch(coordinate, "jar");
+    }
+
+    @Override
+    public CompletableFuture<Optional<Path>> fetchArtifactAsync(MavenCoordinate coordinate) {
+        return CompletableFuture.completedFuture(fetchArtifact(coordinate));
     }
 
     private Optional<Path> fetch(MavenCoordinate coordinate, String extension) {

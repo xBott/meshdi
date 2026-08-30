@@ -17,52 +17,10 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
         ModuleStartDiagnostic.NothingStarted
 {
 
-    static ModuleStartDiagnostic incorrectState(
+    record IncorrectState(
             @NonNull String id,
             @NonNull ModuleState actualState
-    ) {
-        return new IncorrectState(id, actualState);
-    }
-
-    static ModuleStartDiagnostic bootstrapFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new BootstrapFailed(id, error);
-    }
-
-    static ModuleStartDiagnostic contextNotStarted(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new ContextNotStarted(id, error);
-    }
-
-    static ModuleStartDiagnostic meshRegistrationFailed(
-            @NonNull String id,
-            @NonNull Throwable error
-    ) {
-        return new MeshRegistrationFailed(id, error);
-    }
-
-    static ModuleStartDiagnostic started(
-            @NonNull String id,
-            @NonNull SemVersion version
-    ) {
-        return new Started(id, version);
-    }
-
-    static ModuleStartDiagnostic startedN(
-            int amount
-    ) {
-        return new StartedN(amount);
-    }
-
-    static ModuleStartDiagnostic nothingStarted() {
-        return new NothingStarted();
-    }
-
-    record IncorrectState(String id, ModuleState actualState) implements ModuleStartDiagnostic {
+    ) implements ModuleStartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -77,7 +35,10 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
     }
 
 
-    record BootstrapFailed(String id, Throwable error) implements ModuleStartDiagnostic {
+    record BootstrapFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -91,7 +52,10 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
 
     }
 
-    record ContextNotStarted(String id, Throwable error) implements ModuleStartDiagnostic {
+    record ContextNotStarted(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -105,7 +69,10 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
 
     }
 
-    record MeshRegistrationFailed(String id, Throwable error) implements ModuleStartDiagnostic {
+    record MeshRegistrationFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStartDiagnostic {
 
         @Override
         public DiagnosticType type() {
@@ -119,7 +86,10 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
 
     }
 
-    record Started(String id, SemVersion version) implements ModuleStartDiagnostic {
+    record Started(
+            @NonNull String id,
+            @NonNull SemVersion version
+    ) implements ModuleStartDiagnostic {
 
         @Override
         public DiagnosticType type() {

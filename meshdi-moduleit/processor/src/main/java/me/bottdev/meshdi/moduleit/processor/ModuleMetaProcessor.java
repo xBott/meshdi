@@ -1,6 +1,8 @@
 package me.bottdev.meshdi.moduleit.processor;
 
 import com.google.auto.service.AutoService;
+import lombok.Builder;
+import lombok.NonNull;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
@@ -17,10 +19,15 @@ import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.kern.version.VersionRange;
 import me.bottdev.kern.version.VersionRangeParser;
+import me.bottdev.meshdi.moduleit.api.library.LibraryRequirement;
+import me.bottdev.meshdi.moduleit.api.library.LibraryScope;
+import me.bottdev.meshdi.moduleit.api.library.RepositoryDeclaration;
 
 import javax.annotation.processing.Processor;
 import javax.lang.model.element.Modifier;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -40,16 +47,67 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
             String version
     ) {}
 
+    private record RepositoryRepresentation(
+            @NonNull String id,
+            @NonNull String url
+    ) {}
+
+    private record LibraryRepresentation(
+            @NonNull String coordinate,
+            @NonNull LibraryScope scope
+    ) {}
+
+    @Builder
     private record ModuleRepresentation(
-            ClassModel model,
-            String id,
-            String version,
-            String apiVersion,
-            List<DependencyRepresentation> dependencies,
-            String[] exports
+            @NonNull ClassModel model,
+            @NonNull String id,
+            @NonNull String version,
+            @NonNull String apiVersion,
+            @NonNull List<DependencyRepresentation> dependencies,
+            @NonNull String[] exports,
+            @NonNull List<RepositoryRepresentation> repositories,
+            @NonNull List<LibraryRepresentation> libraries
     ) {}
 
     private ModuleRepresentation discovered = null;
+
+    private boolean isValidUrl(String urlString) {
+        if (urlString == null || urlString.isBlank()) {
+            return false;
+        }
+
+        try {
+            URI uri = new URI(urlString);
+            String scheme = uri.getScheme();
+            return "http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme);
+
+        } catch (URISyntaxException e) {
+            return false;
+
+        }
+    }
+
+    private boolean isValidMavenCoordinate(String coordinate) {
+        if (coordinate == null || coordinate.trim().isEmpty()) {
+            return false;
+        }
+
+        String[] parts = coordinate.split(":");
+
+        if (parts.length < 3 || parts.length > 5) {
+            return false;
+        }
+
+        String partRegex = "^[A-Za-z0-9_\\-.]+$";
+
+        for (String part : parts) {
+            if (part == null || part.trim().isEmpty() || !part.matches(partRegex)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     @Override
     protected void configure(ProcessorConfigurationBuilder builder) {
@@ -72,7 +130,24 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
 
                     String[] exports = module.exports();
 
-                    return new ModuleRepresentation(model, id, version, apiVersion, dependencies, exports);
+                    List<RepositoryRepresentation> repositories = Arrays.stream(module.repositories())
+                            .map(repository -> new RepositoryRepresentation(repository.id(), repository.url()))
+                            .toList();
+
+                    List<LibraryRepresentation> libraries = Arrays.stream(module.libraries())
+                            .map(library -> new LibraryRepresentation(library.value(), library.scope()))
+                            .toList();
+
+                    return ModuleRepresentation.builder()
+                            .model(model)
+                            .id(id)
+                            .version(version)
+                            .apiVersion(apiVersion)
+                            .dependencies(dependencies)
+                            .exports(exports)
+                            .repositories(repositories)
+                            .libraries(libraries)
+                            .build();
 
                 })
                 .validate(rules -> rules
@@ -120,6 +195,26 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
                                     );
 
                                 }
+                            }
+                            return ok();
+                        })
+                        .rule(representation -> {
+                            for (RepositoryRepresentation repository : representation.repositories()) {
+                                if (!isValidUrl(repository.url())) return error(
+                                        "Declared repository \"" +
+                                                repository.id() +
+                                                "\" has incorrect URL format: " +
+                                                repository.url()
+                                );
+                            }
+                            return ok();
+                        })
+                        .rule(representation -> {
+                            for (LibraryRepresentation library : representation.libraries) {
+                                if (!isValidMavenCoordinate(library.coordinate)) return error(
+                                        "Required library has incorrect maven coordinate format: \"" +
+                                                library.coordinate()
+                                );
                             }
                             return ok();
                         })
@@ -232,6 +327,100 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
         typeSpec.addMethod(methodSpec.build());
     }
 
+
+    private void generateRepositories(
+            ModuleRepresentation representation,
+            TypeSpec.Builder typeSpec
+    ) {
+
+        List<RepositoryRepresentation> repositories = representation.repositories();
+        ParameterizedTypeName declarationSetClassName = ParameterizedTypeName.get(Set.class, RepositoryDeclaration.class);
+
+        typeSpec.addField(
+                FieldSpec.builder(declarationSetClassName, "repositories")
+                        .addModifiers(Modifier.PRIVATE)
+                        .initializer("null")
+                        .build()
+        );
+
+        MethodSpec.Builder methodSpec = MethodSpec.methodBuilder("repositories")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .beginControlFlow("if (repositories == null)");
+
+        StringBuilder setOfArguments = new StringBuilder();
+        for (int i = 0; i < repositories.size(); i++) {
+            RepositoryRepresentation repository = repositories.get(i);
+            String packageName = "repository" + i;
+            methodSpec.addStatement("$T $L = new $T($S, $S)",
+                    RepositoryDeclaration.class,
+                    packageName,
+                    RepositoryDeclaration.class,
+                    repository.id(),
+                    repository.url()
+            );
+
+            setOfArguments.append(packageName);
+            if (i < repositories.size() - 1) setOfArguments.append(", ");
+        }
+
+        methodSpec
+                .addStatement("repositories = $T.of($L)", Set.class, setOfArguments.toString())
+                .endControlFlow()
+                .addStatement("return repositories");
+
+        methodSpec.returns(declarationSetClassName);
+
+        typeSpec.addMethod(methodSpec.build());
+    }
+
+    private void generateLibraries(
+            ModuleRepresentation representation,
+            TypeSpec.Builder typeSpec
+    ) {
+
+        List<LibraryRepresentation> libraries = representation.libraries;
+        ParameterizedTypeName librarySetClassName = ParameterizedTypeName.get(Set.class, LibraryRequirement.class);
+
+        typeSpec.addField(
+                FieldSpec.builder(librarySetClassName, "libraries")
+                        .addModifiers(Modifier.PRIVATE)
+                        .initializer("null")
+                        .build()
+        );
+
+        MethodSpec.Builder methodSpec = MethodSpec.methodBuilder("libraries")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .beginControlFlow("if (libraries == null)");
+
+        StringBuilder setOfArguments = new StringBuilder();
+        for (int i = 0; i < libraries.size(); i++) {
+            LibraryRepresentation library = libraries.get(i);
+            String packageName = "library" + i;
+            methodSpec.addStatement("$T $L = new $T($S, $T.$L)",
+                    LibraryRequirement.class,
+                    packageName,
+                    LibraryRequirement.class,
+                    library.coordinate(),
+                    LibraryScope.class,
+                    library.scope()
+            );
+
+            setOfArguments.append(packageName);
+            if (i < libraries.size() - 1) setOfArguments.append(", ");
+        }
+
+        methodSpec
+                .addStatement("libraries = $T.of($L)", Set.class, setOfArguments.toString())
+                .endControlFlow()
+                .addStatement("return libraries");
+
+        methodSpec.returns(librarySetClassName);
+
+        typeSpec.addMethod(methodSpec.build());
+    }
+
     private void generateToString(
             ModuleRepresentation representation,
             TypeSpec.Builder typeSpec,
@@ -255,6 +444,10 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
                                 ".append(getVersionedDependencies())" +
                                 ".append(\", exports=\")" +
                                 ".append(exports())" +
+                                ".append(\", repositories=\")" +
+                                ".append(repositories())" +
+                                ".append(\", libraries=\")" +
+                                ".append(libraries())" +
                                 ".append(\"]\")" +
                                 ".toString()",
                                 StringBuilder.class,
@@ -319,6 +512,8 @@ public class ModuleMetaProcessor extends AbstractMetaProcessor {
         );
         generateDependencies(representation, typeSpec);
         generateExports(representation, typeSpec);
+        generateRepositories(representation, typeSpec);
+        generateLibraries(representation, typeSpec);
         generateToString(representation, typeSpec, descriptorName);
 
         JavaFile javaFile = JavaFile.builder(packageName, typeSpec.build())

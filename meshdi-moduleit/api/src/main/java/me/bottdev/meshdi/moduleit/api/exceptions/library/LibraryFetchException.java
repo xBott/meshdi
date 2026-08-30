@@ -2,15 +2,24 @@ package me.bottdev.meshdi.moduleit.api.exceptions.library;
 
 import lombok.Getter;
 
-@Getter
-public class LibraryException extends Exception {
+import java.net.URI;
 
-    public LibraryException(String message) {
+@Getter
+public class LibraryFetchException extends LibraryException {
+
+    private final String id;
+    private final URI uri;
+
+    public LibraryFetchException(String id, URI uri, String message) {
         super(message);
+        this.id = id;
+        this.uri = uri;
     }
 
-    public LibraryException(String message, Throwable cause) {
+    public LibraryFetchException(String id, URI uri, String message, Throwable cause) {
         super(message, cause);
+        this.id = id;
+        this.uri = uri;
     }
 
 }

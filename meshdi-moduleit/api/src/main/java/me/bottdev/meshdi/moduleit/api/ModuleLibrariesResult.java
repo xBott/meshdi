@@ -1,7 +1,6 @@
-package me.bottdev.meshdi.moduleit.api.library;
+package me.bottdev.meshdi.moduleit.api;
 
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
-import me.bottdev.meshdi.moduleit.api.ModuleHandle;
 import me.bottdev.meshdi.moduleit.api.diagnostic.LibraryLoadDiagnostic;
 
 import java.nio.file.Path;

@@ -3,6 +3,9 @@ package me.bottdev.meshdi.moduleit.api;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyAware;
 import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
+import me.bottdev.meshdi.moduleit.api.library.LibraryRequirement;
+import me.bottdev.meshdi.moduleit.api.library.LibraryScope;
+import me.bottdev.meshdi.moduleit.api.library.RepositoryDeclaration;
 
 import java.util.Set;
 
@@ -28,5 +31,12 @@ public interface ModuleDescriptor extends VersionedDependencyAware<String> {
 
     /// @return exported packages, which can be used by other modules.
     Set<String> exports();
+
+    /// @return a set of module's custom repositories.
+    Set<RepositoryDeclaration> repositories();
+
+    /// @return a set of libraries required by the module.
+    Set<LibraryRequirement> libraries();
+
 
 }

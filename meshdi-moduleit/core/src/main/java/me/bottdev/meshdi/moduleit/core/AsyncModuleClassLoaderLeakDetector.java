@@ -1,5 +1,6 @@
 package me.bottdev.meshdi.moduleit.core;
 
+import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 import me.bottdev.meshdi.moduleit.api.ModuleClassLoaderLeakDetector;
 
 import java.lang.ref.PhantomReference;
@@ -23,7 +24,7 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
 
     private final ReferenceQueue<ClassLoader> queue = new ReferenceQueue<>();
     private final Map<Reference<?>, String> tracked = new ConcurrentHashMap<>();
-    private final Map<String, List<CompletableFuture<Void>>> waiters = new ConcurrentHashMap<>();
+    private final Map<String, List<CompletableFuture<LeakDetectorResult>>> waiters = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler;
     private volatile BiConsumer<String, Boolean> onResult = (_, _) -> {};
 
@@ -58,8 +59,8 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
     }
 
     @Override
-    public CompletableFuture<Void> awaitUnloadAsync(String moduleId, Duration timeout) {
-        CompletableFuture<Void> future = new CompletableFuture<>();
+    public CompletableFuture<LeakDetectorResult> awaitUnloadAsync(String moduleId, Duration timeout) {
+        CompletableFuture<LeakDetectorResult> future = new CompletableFuture<>();
         waiters.computeIfAbsent(moduleId, id -> new CopyOnWriteArrayList<>()).add(future);
 
         // System.gc() is a real pause - it must never run on the caller's thread.
@@ -79,12 +80,12 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
         ScheduledFuture<?> timeoutTask = scheduler.schedule(() -> {
             if (!future.isDone()) {
                 removeWaiter(moduleId, future);
-                future.completeExceptionally(new IllegalStateException(
+                future.complete(new LeakDetectorResult.Leaked(new IllegalStateException(
                         "ClassLoader for module '" + moduleId + "' was not garbage collected within "
                                 + timeout + ". Something still holds a strong reference to it or to one "
                                 + "of its loaded classes (static fields, ThreadLocals, live threads started "
                                 + "by the module, listeners registered in a longer-lived component, etc.)."
-                ));
+                )));
             }
         }, timeout.toMillis(), TimeUnit.MILLISECONDS);
 
@@ -93,7 +94,7 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
         return future;
     }
 
-    private void removeWaiter(String moduleId, CompletableFuture<Void> future) {
+    private void removeWaiter(String moduleId, CompletableFuture<LeakDetectorResult> future) {
         waiters.computeIfPresent(moduleId, (id, list) -> {
             list.remove(future);
             return list.isEmpty() ? null : list;
@@ -112,10 +113,10 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
     }
 
     private void completeWaiters(String moduleId) {
-        List<CompletableFuture<Void>> list = waiters.remove(moduleId);
+        List<CompletableFuture<LeakDetectorResult>> list = waiters.remove(moduleId);
         if (list != null) {
-            for (CompletableFuture<Void> future : list) {
-                future.complete(null);
+            for (CompletableFuture<LeakDetectorResult> future : list) {
+                future.complete(new LeakDetectorResult.Freed());
             }
         }
     }

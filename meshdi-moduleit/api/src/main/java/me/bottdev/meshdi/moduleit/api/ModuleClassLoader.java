@@ -1,4 +1,4 @@
-package me.bottdev.meshdi.moduleit.core;
+package me.bottdev.meshdi.moduleit.api;
 
 import lombok.Getter;
 import lombok.NonNull;

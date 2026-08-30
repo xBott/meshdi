@@ -1,6 +1,8 @@
 package me.bottdev.meshdi.moduleit.api.library;
 
 import me.bottdev.meshdi.moduleit.api.exceptions.library.PomParseException;
+import me.bottdev.meshdi.moduleit.api.library.xml.XmlNode;
+import me.bottdev.meshdi.moduleit.api.library.xml.XmlParser;
 
 import java.nio.file.Path;
 import java.util.*;
