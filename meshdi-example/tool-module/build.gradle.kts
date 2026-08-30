@@ -14,6 +14,8 @@ dependencies {
 
     implementation(project(":meshdi-example:root-module"))
 
+    compileOnly("com.squareup.okhttp3:okhttp:5.0.0-alpha.12")
+
 }
 
 tasks.register<Copy>("copyJar") {
