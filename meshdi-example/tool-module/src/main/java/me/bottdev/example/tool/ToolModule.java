@@ -19,7 +19,7 @@ import java.io.IOException;
 @Module(
         id = "tool",
         version = "0.0.1",
-        apiVersion = ">=1.0.0",
+        apiVersion = "*",
         dependencies = {
                 @DependsOn(id = "root")
         },
