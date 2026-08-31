@@ -7,21 +7,25 @@ import me.bottdev.meshdi.moduleit.api.library.MavenRepository;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public class LocalMavenCache implements MavenRepository {
 
+    private final String id;
     private final Path cacheRoot;
 
     public LocalMavenCache(
+            @NonNull String id,
             @NonNull Path cacheRoot
     ) {
+        this.id = id;
         this.cacheRoot = cacheRoot;
     }
 
     @Override
     public String id() {
-        return "local-cache";
+        return id;
     }
 
     @Override

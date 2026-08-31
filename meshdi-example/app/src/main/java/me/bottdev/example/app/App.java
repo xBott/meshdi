@@ -99,7 +99,7 @@ public class App {
                         config.implementation(KahnSorter.class)
                 )
                 .factory(key(LocalMavenCache.class), config ->
-                        config.factory(_ -> new LocalMavenCache(Path.of("libraries")))
+                        config.factory(_ -> new LocalMavenCache("local", Path.of("libraries")))
                 )
                 .factory(key(MavenRepositoryChain.class), config ->
                         config
