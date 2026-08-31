@@ -6,7 +6,6 @@ import me.bottdev.meshdi.moduleit.api.ModuleRepository;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.core.URLModuleCandidate;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -27,16 +26,17 @@ public class LocalModuleRepository implements ModuleRepository {
     /// @throws IllegalArgumentException when provided path is not a directory.
     public LocalModuleRepository(Path directory) {
         Objects.requireNonNull(directory, "Repository path must be non-null");
-        createDirectoryIfNotExists();
+
+        try {
+            Files.createDirectories(directory);
+
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Cannot create repository directory: " + directory, e);
+        }
+
         if (!Files.isDirectory(directory))
             throw new IllegalArgumentException("Repository path must be a directory: " + directory);
         this.directory = directory;
-    }
-
-    private void createDirectoryIfNotExists() {
-        if (Files.exists(directory)) return;
-        File file = directory.toFile();
-        file.mkdirs();
     }
 
     private boolean isModuleJar(Path path) {
@@ -53,8 +53,6 @@ public class LocalModuleRepository implements ModuleRepository {
     public List<ModuleCandidate> candidates() throws CandidateListException {
 
         try {
-
-            createDirectoryIfNotExists();
 
             List<ModuleCandidate> foundCandidates = new ArrayList<>();
 
