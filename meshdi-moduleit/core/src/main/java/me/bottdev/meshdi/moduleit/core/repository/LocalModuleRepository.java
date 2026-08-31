@@ -1,5 +1,6 @@
 package me.bottdev.meshdi.moduleit.core.repository;
 
+import lombok.NonNull;
 import me.bottdev.meshdi.moduleit.api.ModuleCandidate;
 import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
 import me.bottdev.meshdi.moduleit.api.ModuleRepository;
@@ -13,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
@@ -24,9 +24,7 @@ public class LocalModuleRepository implements ModuleRepository {
 
     /// @throws NullPointerException when provided path is null.
     /// @throws IllegalArgumentException when provided path is not a directory.
-    public LocalModuleRepository(Path directory) {
-        Objects.requireNonNull(directory, "Repository path must be non-null");
-
+    public LocalModuleRepository(@NonNull Path directory) {
         try {
             Files.createDirectories(directory);
 
