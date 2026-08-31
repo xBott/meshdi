@@ -27,6 +27,7 @@ public class LocalModuleRepository implements ModuleRepository {
     /// @throws IllegalArgumentException when provided path is not a directory.
     public LocalModuleRepository(Path directory) {
         Objects.requireNonNull(directory, "Repository path must be non-null");
+        createDirectoryIfNotExists();
         if (!Files.isDirectory(directory))
             throw new IllegalArgumentException("Repository path must be a directory: " + directory);
         this.directory = directory;
