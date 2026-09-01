@@ -6,6 +6,7 @@ import me.bottdev.meshdi.api.Context;
 import java.nio.file.Path;
 import java.util.List;
 
+import me.bottdev.meshdi.api.exceptions.ContextBootstrapException;
 import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 import me.bottdev.meshdi.moduleit.api.ModuleCandidate;
 import me.bottdev.meshdi.moduleit.api.ModuleClassLoader;
@@ -152,8 +153,10 @@ class SimpleModuleHandle implements InternalModuleHandle {
             this.state = ModuleState.STARTED;
             success = true;
 
-        } catch (ContextBuildException ex) {
+        } catch (ContextBootstrapException ex) {
             builder.append(new ModuleStartDiagnostic.BootstrapFailed(moduleId, ex));
+        } catch (ContextBuildException ex) {
+            builder.append(new ModuleStartDiagnostic.BuildFailed(moduleId, ex));
         } catch (ContextStartException ex) {
             builder.append(new ModuleStartDiagnostic.ContextNotStarted(moduleId, ex));
         } catch (MeshRegisterException ex) {

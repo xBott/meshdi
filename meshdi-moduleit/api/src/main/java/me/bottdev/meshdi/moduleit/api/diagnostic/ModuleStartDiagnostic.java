@@ -10,6 +10,7 @@ import me.bottdev.meshdi.moduleit.api.ModuleState;
 public sealed interface ModuleStartDiagnostic extends Diagnostic permits
         ModuleStartDiagnostic.IncorrectState,
         ModuleStartDiagnostic.BootstrapFailed,
+        ModuleStartDiagnostic.BuildFailed,
         ModuleStartDiagnostic.ContextNotStarted,
         ModuleStartDiagnostic.MeshRegistrationFailed,
         ModuleStartDiagnostic.Started,
@@ -48,6 +49,23 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
         @Override
         public String message() {
             return "Failed to bootstrap context of module: " + id + ". Error: " + error;
+        }
+
+    }
+
+    record BuildFailed(
+            @NonNull String id,
+            @NonNull Throwable error
+    ) implements ModuleStartDiagnostic {
+
+        @Override
+        public DiagnosticType type() {
+            return DiagnosticType.ERROR;
+        }
+
+        @Override
+        public String message() {
+            return "Failed to build context of module: " + id + ". Error: " + error;
         }
 
     }
