@@ -16,6 +16,7 @@ import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.kern.version.SemVersion;
 import me.bottdev.kern.version.VersionRange;
 import me.bottdev.meshdi.api.ContextMesh;
+import me.bottdev.meshdi.api.annotations.Dependency;
 import me.bottdev.meshdi.moduleit.api.*;
 import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.*;
@@ -50,7 +51,8 @@ public class SimpleModuleManager implements ModuleManager {
 
     @Builder
     public SimpleModuleManager(
-            @NonNull StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver,
+            @NonNull @Dependency(qualifier = "moduleDependencyResolver")
+            StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver,
             @NonNull ModuleLoadEnvironment environment,
             @NonNull ModuleLibraryLoader libraryLoader,
             @NonNull ContextMesh contextMesh,
