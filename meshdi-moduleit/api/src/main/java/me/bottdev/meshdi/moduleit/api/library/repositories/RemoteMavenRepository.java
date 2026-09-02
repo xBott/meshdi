@@ -66,7 +66,7 @@ public class RemoteMavenRepository implements MavenRepository {
             if (ex.getCause() instanceof LibraryFetchException) {
                 throw (LibraryFetchException) ex.getCause();
             }
-            throw new LibraryFetchException(id(), URI.create(baseUrl), "Unexpected error during fetch", ex.getCause() != null ? ex.getCause() : ex);
+            throw new LibraryFetchException(id(), URI.create(baseUrl), "Unexpected cause during fetch", ex.getCause() != null ? ex.getCause() : ex);
         }
     }
 

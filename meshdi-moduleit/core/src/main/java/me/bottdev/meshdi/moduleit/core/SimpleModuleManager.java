@@ -2,7 +2,7 @@ package me.bottdev.meshdi.moduleit.core;
 
 import lombok.Builder;
 import lombok.NonNull;
-import me.bottdev.kern.commons.diagnostic.DiagnosticType;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSeverity;
 import me.bottdev.kern.commons.diagnostic.Diagnostics;
 import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
 import me.bottdev.kern.commons.diagnostic.ListDiagnostics;
@@ -10,11 +10,9 @@ import me.bottdev.kern.commons.wrapper.DiagnosticResult;
 import me.bottdev.kern.dependency.DependencyDiagnostic;
 import me.bottdev.kern.dependency.DependentContainer;
 import me.bottdev.kern.dependency.ResolutionResult;
-import me.bottdev.kern.dependency.StatefulDependencyResolver;
 import me.bottdev.kern.dependency.containers.SimpleDependentContainer;
+import me.bottdev.kern.dependency.versioned.StatefulVersionedDependencyResolver;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
-import me.bottdev.kern.version.SemVersion;
-import me.bottdev.kern.version.VersionRange;
 import me.bottdev.meshdi.api.ContextMesh;
 import me.bottdev.meshdi.api.annotations.Dependency;
 import me.bottdev.meshdi.moduleit.api.*;
@@ -35,11 +33,14 @@ import me.bottdev.meshdi.moduleit.core.classprovider.ExportRegistryClassProvider
 import me.bottdev.meshdi.moduleit.core.classprovider.IsolatedLibraryClassProvider;
 import me.bottdev.meshdi.moduleit.core.classprovider.PlatformClassProvider;
 import me.bottdev.meshdi.moduleit.core.classprovider.SharedLibraryClassProvider;
+import org.semver4j.Semver;
+import org.semver4j.range.RangeList;
+
 import java.net.URLClassLoader;
 
 public class SimpleModuleManager implements ModuleManager {
 
-    private final StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver;
+    private final StatefulVersionedDependencyResolver<String, ModuleCandidate> dependencyResolver;
     private final ModuleLoadEnvironment environment;
     private final ModuleLibraryLoader libraryLoader;
     private final ContextMesh contextMesh;
@@ -52,7 +53,7 @@ public class SimpleModuleManager implements ModuleManager {
     @Builder
     public SimpleModuleManager(
             @NonNull @Dependency(qualifier = "moduleDependencyResolver")
-            StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver,
+            StatefulVersionedDependencyResolver<String, ModuleCandidate> dependencyResolver,
             @NonNull ModuleLoadEnvironment environment,
             @NonNull ModuleLibraryLoader libraryLoader,
             @NonNull ContextMesh contextMesh,
@@ -66,7 +67,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     ContextMesh contextMesh() { return contextMesh; }
-    StatefulDependencyResolver<String, ModuleCandidate> dependencyResolver() { return dependencyResolver; }
+    StatefulVersionedDependencyResolver<String, ModuleCandidate> dependencyResolver() { return dependencyResolver; }
     void removeHandle(String id) { handles.remove(id); }
 
     public void addSharedLibraries(Collection<Path> paths) {
@@ -145,7 +146,7 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleDescriptor descriptor = candidate.descriptor();
             String moduleId = descriptor.id();
-            VersionRange requiredApiVersion = descriptor.apiVersion();
+            RangeList requiredApiVersion = descriptor.apiVersion();
 
             if (exists(moduleId)) {
                 diagnosticsBuilder.append(new ModuleResolutionDiagnostic.AlreadyLoaded(moduleId));
@@ -157,7 +158,7 @@ public class SimpleModuleManager implements ModuleManager {
                 continue;
             }
 
-            if (!requiredApiVersion.satisfies(environment.apiVersion())) {
+            if (!environment.apiVersion().satisfies(requiredApiVersion)) {
                 diagnosticsBuilder.append(new ModuleResolutionDiagnostic.ApiVersionMismatch(
                         moduleId,
                         requiredApiVersion,
@@ -189,7 +190,7 @@ public class SimpleModuleManager implements ModuleManager {
             return DiagnosticResult.success(diagnosticResult.unwrap(), diagnosticsBuilder.build());
 
         } else {
-            diagnosticsBuilder.append(new ModuleResolutionDiagnostic.BadResolution(diagnosticResult.unwrapDiagnostics()));
+            diagnosticsBuilder.append(new ModuleResolutionDiagnostic.BadDependencyResolution(diagnosticResult.unwrapDiagnostics()));
             return DiagnosticResult.failure(diagnosticsBuilder.build());
 
         }
@@ -217,7 +218,7 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleDescriptor descriptor = candidate.descriptor();
             String moduleId = descriptor.id();
-            SemVersion version = descriptor.version();
+            Semver version = descriptor.semver();
 
             InternalModuleHandle handle;
             if (candidate instanceof InternalModuleCandidate internalCandidate) {
@@ -243,7 +244,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         return libraryLoader.loadAll(resolved).thenApply(result -> {
 
-            boolean hasErrors = result.diagnostics().has(DiagnosticType.ERROR);
+            boolean hasErrors = result.diagnostics().has(DiagnosticSeverity.ERROR);
 
             if (hasErrors) {
                 return result.diagnostics();
@@ -569,9 +570,9 @@ public class SimpleModuleManager implements ModuleManager {
                 case ModuleStopDiagnostic.IncorrectState notStarted ->
                         new ModuleRestartDiagnostic.IncorrectState(notStarted.id());
                 case ModuleStopDiagnostic.MeshUnregisterPlanFailed planFailed ->
-                        new ModuleRestartDiagnostic.MeshUnregisterPlanFailed(planFailed.id(), planFailed.error());
+                        new ModuleRestartDiagnostic.MeshUnregisterPlanFailed(planFailed.id(), planFailed.cause());
                 case ModuleStopDiagnostic.MeshUnregisterExecutionFailed executionFailed ->
-                        new ModuleRestartDiagnostic.MeshUnregisterExecutionFailed(executionFailed.id(), executionFailed.error());
+                        new ModuleRestartDiagnostic.MeshUnregisterExecutionFailed(executionFailed.id(), executionFailed.cause());
                 case ModuleStopDiagnostic.ForgetFailed forgetFailed ->
                         new ModuleRestartDiagnostic.ForgetFailed(forgetFailed.id(), forgetFailed.dependents());
                 default -> null;
@@ -592,11 +593,11 @@ public class SimpleModuleManager implements ModuleManager {
 
             ModuleRestartDiagnostic restartDiagnostic = switch (startDiagnostic) {
                 case ModuleStartDiagnostic.BootstrapFailed bootstrapFailed ->
-                        new ModuleRestartDiagnostic.BootstrapFailed(bootstrapFailed.id(), bootstrapFailed.error());
+                        new ModuleRestartDiagnostic.BootstrapFailed(bootstrapFailed.id(), bootstrapFailed.cause());
                 case ModuleStartDiagnostic.ContextNotStarted notStarted ->
-                        new ModuleRestartDiagnostic.ContextNotStarted(notStarted.id(), notStarted.error());
+                        new ModuleRestartDiagnostic.ContextNotStarted(notStarted.id(), notStarted.cause());
                 case ModuleStartDiagnostic.MeshRegistrationFailed registrationFailed ->
-                        new ModuleRestartDiagnostic.MeshRegistrationFailed(registrationFailed.id(), registrationFailed.error());
+                        new ModuleRestartDiagnostic.MeshRegistrationFailed(registrationFailed.id(), registrationFailed.cause());
                 case ModuleStartDiagnostic.Started started ->
                         new ModuleRestartDiagnostic.Restarted(started.id(), started.version());
                 case ModuleStartDiagnostic.StartedN startedN ->

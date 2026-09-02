@@ -17,24 +17,24 @@ public enum ModuleState {
     STARTING(true),
     /// Module is successfully started. Transition from **STARTING** or **RESTARTING**.
     STARTED(false),
-    /// An error occurred while starting the module. Transition from **STARTING**.
+    /// An cause occurred while starting the module. Transition from **STARTING**.
     START_FAILED(false),
 
     /// Module is restarting. Transition from **LOADED** or **STARTED**.
     RESTARTING(true),
-    /// An error occurred while restarting the module. Transition from **RESTARTING**.
+    /// An cause occurred while restarting the module. Transition from **RESTARTING**.
     RESTART_FAILED(false),
 
     /// Module is stopping. Transition from **STARTED** or **FAILED**.
     STOPPING(true),
-    /// An error occurred while stopping the module. Transition from **STOPPING**.
+    /// An cause occurred while stopping the module. Transition from **STOPPING**.
     STOP_FAILED(false),
     /// Module is stopped. Transition from **STOPPING**.
     STOPPED(false),
 
     /// Module is unloading. Transition from **STOPPED** or **LOADED**.
     UNLOADING(true),
-    /// An error occurred while unloading the module. Transition from **UNLOADING**.
+    /// An cause occurred while unloading the module. Transition from **UNLOADING**.
     UNLOAD_FAILED(false);
 
     @Getter

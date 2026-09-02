@@ -1,11 +1,11 @@
 package me.bottdev.meshdi.moduleit.api;
 
+import lombok.NonNull;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyAware;
-import me.bottdev.kern.version.SemVersion;
-import me.bottdev.kern.version.VersionRange;
 import me.bottdev.meshdi.moduleit.api.library.LibraryRequirement;
-import me.bottdev.meshdi.moduleit.api.library.LibraryScope;
 import me.bottdev.meshdi.moduleit.api.library.RepositoryDeclaration;
+import org.semver4j.Semver;
+import org.semver4j.range.RangeList;
 
 import java.util.Set;
 
@@ -19,15 +19,22 @@ public interface ModuleDescriptor extends VersionedDependencyAware<String> {
     String id();
 
     @Override
+    @NonNull
     default String dependencyKey() {
         return id();
     }
 
     /// @return version of the module.
-    SemVersion version();
+    Semver semver();
+
+    /// @return version of the module in string format.
+    @NonNull
+    default String version() {
+        return semver().toString();
+    }
 
     /// @return required version range of the API.
-    VersionRange apiVersion();
+    RangeList apiVersion();
 
     /// @return exported packages, which can be used by other modules.
     Set<String> exports();

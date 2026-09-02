@@ -27,7 +27,7 @@ allprojects {
 
 subprojects {
 
-    apply(plugin = "java")
+    apply(plugin = "java-library")
     apply(plugin = "io.github.klahap.dotenv")
     apply(plugin = "maven-publish")
 
@@ -35,6 +35,21 @@ subprojects {
 
     tasks.test {
         useJUnitPlatform()
+    }
+
+    dependencies {
+
+        testImplementation(platform(rootProject.libs.junit.bom))
+        testImplementation(rootProject.libs.junit.jupiter)
+        testImplementation(rootProject.libs.mockito.core)
+        testImplementation(rootProject.libs.mockito.junit.jupiter)
+        testImplementation(rootProject.libs.assertj.core)
+
+        compileOnly(rootProject.libs.lombok)
+        annotationProcessor(rootProject.libs.lombok)
+
+        "api"(rootProject.libs.bundles.kern.default)
+
     }
 
     if (!project.path.startsWith(":meshdi-example")) {

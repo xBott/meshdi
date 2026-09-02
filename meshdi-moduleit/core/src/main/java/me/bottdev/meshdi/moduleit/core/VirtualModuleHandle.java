@@ -5,7 +5,6 @@ import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
 import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
-import me.bottdev.kern.version.SemVersion;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.MeshRegistration;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
@@ -20,6 +19,7 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
+import org.semver4j.Semver;
 
 import java.nio.file.Path;
 import java.time.Duration;
@@ -105,7 +105,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doLoad(SimpleModuleManager manager, DiagnosticsBuilder<ModuleLoadDiagnostic> builder) {
         String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
+        Semver version = descriptor.semver();
 
         if (state != ModuleState.READY) {
             builder.append(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
@@ -126,7 +126,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doStart(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStartDiagnostic> builder) {
         String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
+        Semver version = descriptor.semver();
 
         if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
             builder.append(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
@@ -163,7 +163,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doStop(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStopDiagnostic> builder) {
         String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
+        Semver version = descriptor.semver();
 
         if (state != ModuleState.STARTED) {
             builder.append(new ModuleStopDiagnostic.IncorrectState(moduleId));
@@ -201,7 +201,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     @Override
     public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticsBuilder<ModuleUnloadDiagnostic> builder) {
         String moduleId = descriptor.id();
-        SemVersion version = descriptor.version();
+        Semver version = descriptor.semver();
 
         if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
             builder.append(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));

@@ -42,7 +42,7 @@ public interface ModuleManager {
     /// Ready modules are stored in manager with [ModuleState#READY] state.
     /// @return module prepare command.
     /// @throws IllegalArgumentException if module not found.
-    /// @throws ModulePrepareException if an error occurred during module preparation.
+    /// @throws ModulePrepareException if an cause occurred during module preparation.
     ModuleBatchCommand<CompletableFuture<Diagnostics<LibraryLoadDiagnostic>>> prepare(
             String id,
             DependencyModuleSelector selector
@@ -67,7 +67,7 @@ public interface ModuleManager {
     /// Module must be loaded before calling stop.
     /// @return module start command.
     /// @throws IllegalArgumentException if module not found.
-    /// @throws ModuleStartException if an error occurred during module startup.
+    /// @throws ModuleStartException if an cause occurred during module startup.
     ModuleBatchCommand<Diagnostics<ModuleStartDiagnostic>> start(
             String id,
             DependencyModuleSelector selector
@@ -82,7 +82,7 @@ public interface ModuleManager {
     /// Module must be started before calling stop.
     /// @return module stop command.
     /// @throws IllegalArgumentException if module not found.
-    /// @throws ModuleStopException if an error occurred during module unloading.
+    /// @throws ModuleStopException if an cause occurred during module unloading.
     ModuleBatchCommand<Diagnostics<ModuleStopDiagnostic>> stop(
             String id,
             DependentModuleSelector selector
@@ -97,7 +97,7 @@ public interface ModuleManager {
     /// Module must be stopped or just loaded before calling unload.
     /// @return module unload command.
     /// @throws IllegalArgumentException if module not found.
-    /// @throws ModuleUnloadException if an error occurred during module unloading.
+    /// @throws ModuleUnloadException if an cause occurred during module unloading.
     ModuleBatchCommand<CompletableFuture<Diagnostics<ModuleUnloadDiagnostic>>> unload(
             String id,
             DependentModuleSelector selector
@@ -111,7 +111,7 @@ public interface ModuleManager {
     /// Module must be started before calling restart.
     /// @return module restart command.
     /// @throws IllegalArgumentException if module not found.
-    /// @throws ModuleRestartException if an error occurred during module restart.
+    /// @throws ModuleRestartException if an cause occurred during module restart.
     ModuleBatchCommand<Diagnostics<ModuleRestartDiagnostic>> restart(
             String id,
             DependentModuleSelector selector

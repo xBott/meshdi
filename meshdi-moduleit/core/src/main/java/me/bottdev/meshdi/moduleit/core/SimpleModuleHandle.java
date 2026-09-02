@@ -18,7 +18,6 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
 
-import me.bottdev.kern.version.SemVersion;
 import me.bottdev.meshdi.api.MeshRegistration;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextStartException;
@@ -29,6 +28,7 @@ import me.bottdev.meshdi.core.SimpleContextBootstrap;
 import me.bottdev.meshdi.core.mesh.MeshContextSelectionStrategies;
 import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
+import org.semver4j.Semver;
 
 import java.net.MalformedURLException;
 import java.time.Duration;
@@ -95,7 +95,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doLoad(SimpleModuleManager manager, DiagnosticsBuilder<ModuleLoadDiagnostic> builder) {
         String moduleId = descriptor().id();
-        SemVersion version = descriptor().version();
+        Semver version = descriptor().semver();
 
         if (state != ModuleState.READY) {
             builder.append(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
@@ -116,8 +116,8 @@ class SimpleModuleHandle implements InternalModuleHandle {
             builder.append(new ModuleLoadDiagnostic.Loaded(moduleId, version));
             return true;
 
-        } catch (MalformedURLException e) {
-            builder.append(new ModuleLoadDiagnostic.MalformedLibraryUrl(moduleId, Path.of(e.getMessage()), e.getMessage()));
+        } catch (MalformedURLException ex) {
+            builder.append(new ModuleLoadDiagnostic.MalformedLibraryUrl(moduleId, Path.of(ex.getMessage()), ex));
             return false;
         }
     }
@@ -125,7 +125,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doStart(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStartDiagnostic> builder) {
         String moduleId = descriptor().id();
-        SemVersion version = descriptor().version();
+        Semver version = descriptor().semver();
 
         if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
             builder.append(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
@@ -176,7 +176,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
     @Override
     public boolean doStop(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStopDiagnostic> builder) {
         String moduleId = descriptor().id();
-        SemVersion version = descriptor().version();
+        Semver version = descriptor().semver();
 
         if (state != ModuleState.STARTED) {
             builder.append(new ModuleStopDiagnostic.IncorrectState(moduleId));
@@ -214,7 +214,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
     @Override
     public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticsBuilder<ModuleUnloadDiagnostic> builder) {
         String moduleId = descriptor().id();
-        SemVersion version = descriptor().version();
+        Semver version = descriptor().semver();
 
         if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
             builder.append(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));

@@ -70,7 +70,7 @@ public class MavenDependencyResolver {
                 pomModel = pomResolver.resolveEffectivePom(coordinate, context);
             } catch (PomParseException ex) {
                 context.diagnosticsBuilder().append(
-                        new LibraryLoadDiagnostic.PomParseFailed(coordinate, ex.getMessage())
+                        new LibraryLoadDiagnostic.PomParseFailed(coordinate, ex)
                 );
                 continue;
             }
@@ -94,7 +94,7 @@ public class MavenDependencyResolver {
 
                 String version = dependency.version();
                 if (version == null) {
-                    context.diagnosticsBuilder().append(new LibraryLoadDiagnostic.PomParseFailed(coordinate, "Unresolved version for dependency " + dependencyKey));
+                    context.diagnosticsBuilder().append(new LibraryLoadDiagnostic.VersionUnresolved(coordinate, dependencyKey));
                     continue;
                 }
 

@@ -5,12 +5,11 @@ import me.bottdev.kern.commons.download.DownloadManager;
 import me.bottdev.kern.commons.download.ParallelDownloadManager;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
-import me.bottdev.kern.dependency.graph.GraphStatefulVersionedDependencyResolver;
+import me.bottdev.kern.dependency.versioned.graph.GraphStatefulVersionedDependencyResolver;
 import me.bottdev.kern.struct.algorithms.cycle.CycleDetector;
 import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.kern.struct.algorithms.sort.TopologicalSorter;
-import me.bottdev.kern.version.SemVersionParser;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextStartException;
@@ -27,10 +26,13 @@ import me.bottdev.meshdi.moduleit.api.library.repositories.RemoteMavenRepository
 import me.bottdev.meshdi.moduleit.core.*;
 import me.bottdev.meshdi.moduleit.core.repository.CompositeModuleRepository;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
+import org.semver4j.Semver;
+import org.semver4j.range.RangeListFactory;
 
 import java.net.http.HttpClient;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import static me.bottdev.kern.commons.key.KeyUtils.key;
@@ -157,7 +159,7 @@ public class App {
                 .dependencyResolver(internalContext.autowire(GraphStatefulVersionedDependencyResolver.class))
                 .environment(
                         SimpleModuleLoadEnvironment.builder()
-                                .apiVersion(SemVersionParser.parse("1.0.0"))
+                                .apiVersion(Objects.requireNonNull(Semver.parse("1.0.0")))
                                 .apiLoader(App.class.getClassLoader())
                                 .apiPackages(Set.of(
                                         "me.bottdev.meshdi",
@@ -203,7 +205,7 @@ public class App {
                         .descriptor(
                                 VirtualModuleDescriptor.builder()
                                         .id("api")
-                                        .version(SemVersionParser.parse("1.0.0"))
+                                        .semver(Objects.requireNonNull(Semver.parse("1.0.0")))
                                         .build()
                         )
                         .context(context)

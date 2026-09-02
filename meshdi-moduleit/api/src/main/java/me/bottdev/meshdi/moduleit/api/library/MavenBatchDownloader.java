@@ -30,7 +30,7 @@ public class MavenBatchDownloader {
                         if (ex != null) {
                             LibraryFetchException fetchEx = (LibraryFetchException) ex;
                             context.diagnosticsBuilder().append(
-                                    new LibraryLoadDiagnostic.DownloadFailed(coordinate, fetchEx.getId(), ex.getMessage()));
+                                    new LibraryLoadDiagnostic.DownloadFailed(coordinate, fetchEx.getId(), ex));
 
                         } else if (result.isPresent()) {
                             context.diagnosticsBuilder().append(
@@ -38,7 +38,7 @@ public class MavenBatchDownloader {
 
                         } else {
                             context.diagnosticsBuilder().append(
-                                    new LibraryLoadDiagnostic.DownloadFailed(coordinate, "all", "Artifact not found in any repository"));
+                                    new LibraryLoadDiagnostic.DownloadFailed(coordinate, "all", new Throwable("Artifact not found in any repository")));
 
                         }
                     });

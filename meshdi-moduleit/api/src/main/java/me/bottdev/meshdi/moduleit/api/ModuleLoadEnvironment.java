@@ -1,13 +1,13 @@
 package me.bottdev.meshdi.moduleit.api;
 
-import me.bottdev.kern.version.SemVersion;
+import org.semver4j.Semver;
 
 import java.util.Set;
 
 /// Data required to open a new module class loader
 public interface ModuleLoadEnvironment {
 
-    SemVersion apiVersion();
+    Semver apiVersion();
 
     ClassLoader apiLoader();
 

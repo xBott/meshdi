@@ -4,7 +4,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.commons.registry.Registry;
 import me.bottdev.kern.commons.registry.types.SimpleRegistry;
 import me.bottdev.kern.dependency.DependencyResolver;
-import me.bottdev.kern.dependency.graph.GraphDependencyResolver;
+import me.bottdev.kern.dependency.simple.graph.GraphDependencyResolver;
 import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.meshdi.api.*;

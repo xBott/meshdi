@@ -6,7 +6,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
-import me.bottdev.kern.dependency.SimpleDependencyRequest;
+import me.bottdev.kern.dependency.simple.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;

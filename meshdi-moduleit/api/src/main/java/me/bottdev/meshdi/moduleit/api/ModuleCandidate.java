@@ -1,8 +1,8 @@
 package me.bottdev.meshdi.moduleit.api;
 
+import lombok.NonNull;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyAware;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
-import me.bottdev.kern.version.SemVersion;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleDescriptorException;
 
 import java.util.List;
@@ -15,19 +15,21 @@ public interface ModuleCandidate extends VersionedDependencyAware<String> {
     String sourceKey();
 
     /// @return module descriptor extracted from a physical candidate
-    /// @throws ModuleDescriptorException when an error occurred while reading module descriptor of the candidate
+    /// @throws ModuleDescriptorException when an cause occurred while reading module descriptor of the candidate
     ModuleDescriptor descriptor();
 
     /// @return the URL pointing to the module's JAR file or primary source.
     java.net.URL sourceUrl();
 
     @Override
+    @NonNull
     default String dependencyKey() {
         return descriptor().dependencyKey();
     }
 
     @Override
-    default SemVersion version() {
+    @NonNull
+    default String version() {
         return descriptor().version();
     }
 

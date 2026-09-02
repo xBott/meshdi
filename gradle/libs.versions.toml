@@ -4,36 +4,38 @@ mockito = "5.11.0"
 assertj = "4.0.0-M1"
 lombok = "1.18.38"
 guava = "33.5.0-jre"
-kern = "0.0.44-SNAPSHOT"
+kern = "0.0.49-SNAPSHOT"
 auto-service = "1.1.1"
 compile-testing = "0.23.0"
 java-poet = "1.13.0"
+semver4j = "6.0.0"
 
 
 [libraries]
+#tests
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
-
 mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 mockito-junit-jupiter = { module = "org.mockito:mockito-junit-jupiter", version.ref = "mockito" }
-
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
-
-lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
-
-guava = { module = "com.google.guava:guava", version.ref = "guava" }
-google-auto-service = { module = "com.google.auto.service:auto-service", version.ref = "auto-service" }
 google-compile-testing = { module = "com.google.testing.compile:compile-testing", version.ref = "compile-testing" }
 
-kern-commons = { module = "me.bottdev:kern-commons", version.ref = "kern" }
-kern-struct = { module = "me.bottdev:kern-struct", version.ref = "kern" }
-kern-dependency = { module = "me.bottdev:kern-dependency", version.ref = "kern" }
-kern-meta-core = { module = "me.bottdev:kern-meta-core", version.ref = "kern" }
-kern-meta-apt = { module = "me.bottdev:kern-meta-apt", version.ref = "kern" }
-kern-version = { module = "me.bottdev:kern-version", version.ref = "kern" }
-
+#utils
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+semver4j = { module = "org.semver4j:semver4j", version.ref = "semver4j" }
+google-auto-service = { module = "com.google.auto.service:auto-service", version.ref = "auto-service" }
 java-poet = { module = "com.squareup:javapoet", version.ref = "java-poet" }
 
+#kern
+kern-commons = { module = "me.bottdev:kern-commons", version.ref = "kern" }
+kern-struct = { module = "me.bottdev:kern-struct", version.ref = "kern" }
+kern-dependency-api = { module = "me.bottdev:kern-dependency-api", version.ref = "kern" }
+kern-dependency-simple = { module = "me.bottdev:kern-dependency-simple", version.ref = "kern" }
+kern-dependency-versioned = { module = "me.bottdev:kern-dependency-versioned", version.ref = "kern" }
+kern-meta-core = { module = "me.bottdev:kern-meta-core", version.ref = "kern" }
+kern-meta-apt = { module = "me.bottdev:kern-meta-apt", version.ref = "kern" }
+
 [bundles]
-kern-default = [ "kern-commons", "kern-struct", "kern-dependency" ]
+kern-default = [ "kern-commons", "kern-struct", "kern-dependency-api" ]
 kern-meta = [ "kern-meta-core", "kern-meta-apt" ]
