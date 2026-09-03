@@ -128,6 +128,13 @@ public class SimpleModuleManager implements ModuleManager {
                 .toList();
     }
 
+    private ModuleBatchResult getModuleBatchResult(int total, int proceed) {
+        int failed = total - proceed;
+        if (proceed == 0 && total != 0) return new ModuleBatchResult.Failed(failed);
+        if (failed > 0) return new ModuleBatchResult.PartialSuccess(proceed, failed);
+        return new ModuleBatchResult.Success(proceed);
+    }
+
     private Set<ModuleCandidate> resolveUniqueCandidates(
             List<ModuleCandidate> candidates,
             DiagnosticSink<ModuleResolutionDiagnostic> sink
@@ -327,6 +334,7 @@ public class SimpleModuleManager implements ModuleManager {
     private ModuleBatchResult loadBatch(List<ModuleHandle> toLoad) {
 
         DiagnosticSink<ModuleLoadDiagnostic> sink = environment.createDiagnosticSink();
+        int total = toLoad.size();
         int loaded = 0;
 
         for (ModuleHandle handle : toLoad) {
@@ -340,10 +348,7 @@ public class SimpleModuleManager implements ModuleManager {
             sink.accept(new ModuleLoadDiagnostic.NothingLoaded());
         }
 
-        int failed = toLoad.size() - loaded;
-        if (loaded == 0) return new ModuleBatchResult.Failed(failed);
-        if (failed > 0) return new ModuleBatchResult.PartialSuccess(loaded, failed);
-        return new ModuleBatchResult.Success(loaded);
+        return getModuleBatchResult(total, loaded);
     }
 
     @Override
@@ -375,8 +380,9 @@ public class SimpleModuleManager implements ModuleManager {
     private ModuleBatchResult startBatch(List<ModuleHandle> toStart) {
 
         DiagnosticSink<ModuleStartDiagnostic> sink = environment.createDiagnosticSink();
-
+        int total = toStart.size();
         int started = 0;
+
         for (ModuleHandle handle : toStart) {
             InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
             if (internalHandle.doStart(this, sink)) started++;
@@ -391,10 +397,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         }
 
-        int failed = toStart.size() - started;
-        if (started == 0) return new ModuleBatchResult.Failed(failed);
-        if (failed > 0) return new ModuleBatchResult.PartialSuccess(started, failed);
-        return new ModuleBatchResult.Success(started);
+        return getModuleBatchResult(total, started);
 
     }
 
@@ -432,8 +435,9 @@ public class SimpleModuleManager implements ModuleManager {
     private ModuleBatchResult stopBatch(List<ModuleHandle> toStop) {
 
         DiagnosticSink<ModuleStopDiagnostic> sink = environment.createDiagnosticSink();
-
+        int total = toStop.size();
         int stopped = 0;
+
         for (ModuleHandle handle : toStop) {
             InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
             if (internalHandle.doStop(this, sink)) stopped++;
@@ -448,10 +452,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         }
 
-        int failed = toStop.size() - stopped;
-        if (stopped == 0) return new ModuleBatchResult.Failed(failed);
-        if (failed > 0) return new ModuleBatchResult.PartialSuccess(stopped, failed);
-        return new ModuleBatchResult.Success(stopped);
+        return getModuleBatchResult(total, stopped);
 
     }
 
@@ -491,6 +492,7 @@ public class SimpleModuleManager implements ModuleManager {
         DiagnosticSink<ModuleUnloadDiagnostic> sink = environment.createDiagnosticSink();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
+        int total = toUnload.size();
         int unloaded = 0;
 
         for (ModuleHandle handle : toUnload) {
@@ -526,12 +528,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         int finalUnloaded = unloaded;
         return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .thenApply(_ -> {
-                            int failed = toUnload.size() - finalUnloaded;
-                            if (finalUnloaded == 0) return new ModuleBatchResult.Failed(failed);
-                            if (failed > 0) return new ModuleBatchResult.PartialSuccess(finalUnloaded, failed);
-                            return new ModuleBatchResult.Success(finalUnloaded);
-                        });
+                        .thenApply(_ -> getModuleBatchResult(total, finalUnloaded));
     }
 
     @Override
