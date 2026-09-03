@@ -1,6 +1,7 @@
 package me.bottdev.meshdi.core.bindings;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependOrder;
@@ -8,6 +9,7 @@ import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
 import me.bottdev.kern.dependency.simple.SimpleDependencyRequest;
 import me.bottdev.meshdi.api.*;
+import me.bottdev.meshdi.api.bindings.FactoryBindingBuilder;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
@@ -17,7 +19,7 @@ import java.util.*;
 public class FactoryBinding<T> implements Binding<T> {
 
     @RequiredArgsConstructor
-    public static class Builder<T> implements BindingBuilder<T> {
+    public static class Builder<T> implements FactoryBindingBuilder<T> {
 
         @Getter
         private final TypedKey<T> key;
@@ -28,7 +30,7 @@ public class FactoryBinding<T> implements Binding<T> {
         private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers =
                 new EnumMap<>(BeanLifecycleEventType.class);
 
-        public Builder<T> init(InitializationStrategy initializationStrategy) {
+        public Builder<T> init(@NonNull InitializationStrategy initializationStrategy) {
            this.initializationStrategy = initializationStrategy;
             return this;
         }
@@ -41,7 +43,7 @@ public class FactoryBinding<T> implements Binding<T> {
             return init(InitializationStrategy.EAGER);
         }
 
-        public Builder<T> scope(ScopeType scopeType) {
+        public Builder<T> scope(@NonNull ScopeType scopeType) {
             this.scopeType = scopeType;
             return this;
         }
@@ -54,20 +56,23 @@ public class FactoryBinding<T> implements Binding<T> {
             return scope(ScopeType.PROTOTYPE);
         }
 
-        public Builder<T> factory(BeanFactory<T> factory) {
+        public Builder<T> factory(@NonNull BeanFactory<T> factory) {
             this.factory = factory;
             return this;
         }
 
-        public Builder<T> eventHandler(BeanLifecycleEventType type, BeanLifecycleEventHandler<T> handler) {
+        public Builder<T> eventHandler(
+                @NonNull BeanLifecycleEventType type,
+                @NonNull BeanLifecycleEventHandler<T> handler
+        ) {
             eventHandlers.put(type, handler);
             return this;
         }
 
         public Builder<T> dependsOn(
-                TypedKey<?> dependencyKey,
-                DependencyLink link,
-                DependOrder order
+                @NonNull TypedKey<?> dependencyKey,
+                @NonNull DependencyLink link,
+                @NonNull DependOrder order
         ) {
             dependencies.add(new SimpleDependencyRequest<>(dependencyKey, link, order));
             return this;
@@ -129,8 +134,9 @@ public class FactoryBinding<T> implements Binding<T> {
     }
 
     @Override
+    @NonNull
     public List<DependencyRequest<TypedKey<?>>> getDependencies() {
-        return Collections.unmodifiableList(dependencies);
+        return dependencies;
     }
 
     @Override

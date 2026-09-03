@@ -1,5 +1,6 @@
 package me.bottdev.meshdi.core.builders;
 
+import lombok.NonNull;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.commons.registry.Registry;
 import me.bottdev.kern.commons.registry.types.SimpleRegistry;
@@ -12,6 +13,8 @@ import me.bottdev.meshdi.api.exceptions.BindingBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.core.SimpleBeanLifecycleManager;
 import me.bottdev.meshdi.core.SimpleBindingContainer;
+import me.bottdev.meshdi.api.bindings.ConstructorBindingBuilder;
+import me.bottdev.meshdi.api.bindings.FactoryBindingBuilder;
 import me.bottdev.meshdi.core.bindings.ConstructorBinding;
 import me.bottdev.meshdi.core.bindings.FactoryBinding;
 import me.bottdev.meshdi.core.context.SimpleContext;
@@ -26,12 +29,12 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
+public class SimpleContextBuilder implements ContextBuilder {
 
     private static final DependencyResolver dependencyResolver = new GraphDependencyResolver(new KahnSorter(new SimpleCycleDetector()));
 
     private String id;
-    private Map<TypedKey<?>, BindingBuilder<?>> bindingBuilders;
+    private final Map<TypedKey<?>, BindingBuilder<?>> bindingBuilders;
     private BeanLifecycleManager lifecycleManager;
 
     public SimpleContextBuilder() {
@@ -42,28 +45,39 @@ public class SimpleContextBuilder implements ContextBuilder<SimpleContext> {
         this.lifecycleManager = new SimpleBeanLifecycleManager(scopeRegistry);
     }
 
-    public SimpleContextBuilder id(String id) {
+    @Override
+    public SimpleContextBuilder id(@NonNull String id) {
         this.id = id;
         return this;
     }
 
-    public SimpleContextBuilder lifecycleManager(BeanLifecycleManager lifecycleManager) {
+    @Override
+    public SimpleContextBuilder lifecycleManager(@NonNull BeanLifecycleManager lifecycleManager) {
         this.lifecycleManager = lifecycleManager;
         return this;
     }
 
-    public <T> SimpleContextBuilder binding(BindingBuilder<T> bindingBuilder) {
+    @Override
+    public <T> SimpleContextBuilder binding(@NonNull BindingBuilder<T> bindingBuilder) {
         bindingBuilders.put(bindingBuilder.getKey(), bindingBuilder);
         return this;
     }
 
-    public <T> SimpleContextBuilder factory(TypedKey<T> key, Consumer<FactoryBinding.Builder<T>> config) {
+    @Override
+    public <T> SimpleContextBuilder factory(
+            @NonNull TypedKey<T> key,
+            @NonNull Consumer<FactoryBindingBuilder<T>> config
+    ) {
         FactoryBinding.Builder<T> bindingBuilder = new FactoryBinding.Builder<>(key);
         config.accept(bindingBuilder);
         return binding(bindingBuilder);
     }
 
-    public <T> SimpleContextBuilder construct(TypedKey<T> key, Consumer<ConstructorBinding.Builder<T>> config) {
+    @Override
+    public <T> SimpleContextBuilder construct(
+            @NonNull TypedKey<T> key,
+            @NonNull Consumer<ConstructorBindingBuilder<T>> config
+    ) {
         ConstructorBinding.Builder<T> bindingBuilder = new ConstructorBinding.Builder<>(key);
         config.accept(bindingBuilder);
         return binding(bindingBuilder);

@@ -1,10 +1,12 @@
 package me.bottdev.meshdi.core.bindings;
 
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.kern.dependency.DependencyRequest;
 import me.bottdev.meshdi.api.*;
+import me.bottdev.meshdi.api.bindings.ConstructorBindingBuilder;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
 import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
@@ -19,7 +21,7 @@ import java.util.Objects;
 public class ConstructorBinding<T> implements Binding<T> {
 
     @RequiredArgsConstructor
-    public static class Builder<T> implements BindingBuilder<T> {
+    public static class Builder<T> implements ConstructorBindingBuilder<T> {
 
         @Getter
         private final TypedKey<T> key;
@@ -29,7 +31,7 @@ public class ConstructorBinding<T> implements Binding<T> {
         private final Map<BeanLifecycleEventType, BeanLifecycleEventHandler<T>> eventHandlers =
                 new EnumMap<>(BeanLifecycleEventType.class);
 
-        public Builder<T> init(InitializationStrategy initializationStrategy) {
+        public Builder<T> init(@NonNull InitializationStrategy initializationStrategy) {
             this.initializationStrategy = initializationStrategy;
             return this;
         }
@@ -42,7 +44,7 @@ public class ConstructorBinding<T> implements Binding<T> {
             return init(InitializationStrategy.EAGER);
         }
 
-        public Builder<T> scope(ScopeType scopeType) {
+        public Builder<T> scope(@NonNull ScopeType scopeType) {
             this.scopeType = scopeType;
             return this;
         }
@@ -55,12 +57,15 @@ public class ConstructorBinding<T> implements Binding<T> {
             return scope(ScopeType.PROTOTYPE);
         }
 
-        public Builder<T> implementation(Class<? extends T> implementation) {
+        public Builder<T> implementation(@NonNull Class<? extends T> implementation) {
             this.implementation = implementation;
             return this;
         }
 
-        public ConstructorBinding.Builder<T> eventHandler(BeanLifecycleEventType type, BeanLifecycleEventHandler<T> handler) {
+        public Builder<T> eventHandler(
+                @NonNull BeanLifecycleEventType type,
+                @NonNull BeanLifecycleEventHandler<T> handler
+        ) {
             eventHandlers.put(type, handler);
             return this;
         }
@@ -117,6 +122,7 @@ public class ConstructorBinding<T> implements Binding<T> {
     }
 
     @Override
+    @NonNull
     public List<DependencyRequest<TypedKey<?>>> getDependencies() {
         return instantiator.getDependencies();
     }
