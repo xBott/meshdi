@@ -83,6 +83,18 @@ public class SimpleContextBuilder implements ContextBuilder {
         return binding(bindingBuilder);
     }
 
+    @Override
+    public Map<TypedKey<?>, BindingBuilder<?>> bindings() {
+        return Map.copyOf(bindingBuilders);
+    }
+
+    @Override
+    public ContextBuilder merge(@NonNull ContextBuilder other) {
+        Map<TypedKey<?>, BindingBuilder<?>> otherBindings = other.bindings();
+        bindingBuilders.putAll(otherBindings);
+        return this;
+    }
+
     public SimpleContext build(
             Function<BindingContainer, BeanResolver> resolverFactory
     ) throws ContextBuildException {

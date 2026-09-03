@@ -13,7 +13,7 @@ val rootEnvVars = DotEnvBuilder.dotEnv {
 allprojects {
 
     group = "me.bottdev.meshdi"
-    version = "0.0.10-SNAPSHOT"
+    version = "0.0.10   -SNAPSHOT"
 
     repositories {
         mavenCentral()
@@ -44,6 +44,7 @@ subprojects {
         testImplementation(rootProject.libs.mockito.core)
         testImplementation(rootProject.libs.mockito.junit.jupiter)
         testImplementation(rootProject.libs.assertj.core)
+        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
         compileOnly(rootProject.libs.lombok)
         annotationProcessor(rootProject.libs.lombok)
@@ -53,6 +54,12 @@ subprojects {
     }
 
     if (!project.path.startsWith(":meshdi-example")) {
+
+        java {
+            withSourcesJar()
+            withJavadocJar()
+
+        }
 
         publishing {
             repositories {
