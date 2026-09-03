@@ -29,15 +29,15 @@ public class MavenBatchDownloader {
                     .whenComplete((result, ex) -> {
                         if (ex != null) {
                             LibraryFetchException fetchEx = (LibraryFetchException) ex;
-                            context.diagnosticsBuilder().append(
+                            context.diagnosticSink().accept(
                                     new LibraryLoadDiagnostic.DownloadFailed(coordinate, fetchEx.getId(), ex));
 
                         } else if (result.isPresent()) {
-                            context.diagnosticsBuilder().append(
+                            context.diagnosticSink().accept(
                                     new LibraryLoadDiagnostic.DownloadCompleted(coordinate, result.get().repositoryId()));
 
                         } else {
-                            context.diagnosticsBuilder().append(
+                            context.diagnosticSink().accept(
                                     new LibraryLoadDiagnostic.DownloadFailed(coordinate, "all", new Throwable("Artifact not found in any repository")));
 
                         }

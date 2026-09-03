@@ -2,6 +2,7 @@ package me.bottdev.meshdi.moduleit.core;
 
 import lombok.NonNull;
 import lombok.Setter;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
 import me.bottdev.meshdi.api.Context;
 import java.nio.file.Path;
 import java.util.List;
@@ -11,7 +12,7 @@ import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 import me.bottdev.meshdi.moduleit.api.ModuleCandidate;
 import me.bottdev.meshdi.moduleit.api.ModuleClassLoader;
 import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
-import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
+
 import me.bottdev.meshdi.moduleit.api.ModuleState;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
 import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
@@ -93,12 +94,12 @@ class SimpleModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public boolean doLoad(SimpleModuleManager manager, DiagnosticsBuilder<ModuleLoadDiagnostic> builder) {
+    public boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
         if (state != ModuleState.READY) {
-            builder.append(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
 
@@ -109,26 +110,26 @@ class SimpleModuleHandle implements InternalModuleHandle {
             Set<String> exports = descriptor().exports();
             if (exports != null && !exports.isEmpty()) {
                 manager.environment().exportRegistry().register(moduleId, exports, classLoader);
-                builder.append(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
+                sink.accept(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
             }
 
             this.state = ModuleState.LOADED;
-            builder.append(new ModuleLoadDiagnostic.Loaded(moduleId, version));
+            sink.accept(new ModuleLoadDiagnostic.Loaded(moduleId, version));
             return true;
 
         } catch (MalformedURLException ex) {
-            builder.append(new ModuleLoadDiagnostic.MalformedLibraryUrl(moduleId, Path.of(ex.getMessage()), ex));
+            sink.accept(new ModuleLoadDiagnostic.MalformedLibraryUrl(moduleId, Path.of(ex.getMessage()), ex));
             return false;
         }
     }
 
     @Override
-    public boolean doStart(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStartDiagnostic> builder) {
+    public boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
         if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
-            builder.append(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
 
@@ -154,13 +155,13 @@ class SimpleModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (ContextBootstrapException ex) {
-            builder.append(new ModuleStartDiagnostic.BootstrapFailed(moduleId, ex));
+            sink.accept(new ModuleStartDiagnostic.BootstrapFailed(moduleId, ex));
         } catch (ContextBuildException ex) {
-            builder.append(new ModuleStartDiagnostic.BuildFailed(moduleId, ex));
+            sink.accept(new ModuleStartDiagnostic.BuildFailed(moduleId, ex));
         } catch (ContextStartException ex) {
-            builder.append(new ModuleStartDiagnostic.ContextNotStarted(moduleId, ex));
+            sink.accept(new ModuleStartDiagnostic.ContextNotStarted(moduleId, ex));
         } catch (MeshRegisterException ex) {
-            builder.append(new ModuleStartDiagnostic.MeshRegistrationFailed(moduleId, ex));
+            sink.accept(new ModuleStartDiagnostic.MeshRegistrationFailed(moduleId, ex));
         }
 
         if (!success) {
@@ -169,17 +170,17 @@ class SimpleModuleHandle implements InternalModuleHandle {
             return false;
         }
 
-        builder.append(new ModuleStartDiagnostic.Started(moduleId, version));
+        sink.accept(new ModuleStartDiagnostic.Started(moduleId, version));
         return true;
     }
 
     @Override
-    public boolean doStop(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStopDiagnostic> builder) {
+    public boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
         if (state != ModuleState.STARTED) {
-            builder.append(new ModuleStopDiagnostic.IncorrectState(moduleId));
+            sink.accept(new ModuleStopDiagnostic.IncorrectState(moduleId));
             return false;
         }
 
@@ -196,9 +197,9 @@ class SimpleModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (MeshUnregisterExecuteException ex) {
-            builder.append(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
+            sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
         } catch (MeshContextSelectionException ex) {
-            builder.append(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
+            sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
         }
 
         if (!success) {
@@ -207,17 +208,17 @@ class SimpleModuleHandle implements InternalModuleHandle {
             return false;
         }
 
-        builder.append(new ModuleStopDiagnostic.Stopped(moduleId, version));
+        sink.accept(new ModuleStopDiagnostic.Stopped(moduleId, version));
         return true;
     }
 
     @Override
-    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticsBuilder<ModuleUnloadDiagnostic> builder) {
+    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
         if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
-            builder.append(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
             return CompletableFuture.completedFuture(null);
         }
 
@@ -231,7 +232,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (ResolverForgetException ex) {
-            builder.append(new ModuleUnloadDiagnostic.ForgetFailed(moduleId, ex.getDependents()));
+            sink.accept(new ModuleUnloadDiagnostic.ForgetFailed(moduleId, ex.getDependents()));
         }
 
         if (!success) {
@@ -244,7 +245,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
         this.classLoader = null;
 
         manager.leakDetector().track(moduleId, unloadedClassLoader);
-        builder.append(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
+        sink.accept(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
 
         return manager.leakDetector().awaitUnloadAsync(moduleId, Duration.of(10, ChronoUnit.SECONDS));
     }

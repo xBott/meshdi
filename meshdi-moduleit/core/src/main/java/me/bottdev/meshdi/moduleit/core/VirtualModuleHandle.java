@@ -2,7 +2,7 @@ package me.bottdev.meshdi.moduleit.core;
 
 import lombok.Builder;
 import lombok.NonNull;
-import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
 import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.meshdi.api.Context;
@@ -103,33 +103,33 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public boolean doLoad(SimpleModuleManager manager, DiagnosticsBuilder<ModuleLoadDiagnostic> builder) {
+    public boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
         if (state != ModuleState.READY) {
-            builder.append(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleLoadDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
 
         Set<String> exports = descriptor.exports();
         if (exports != null && !exports.isEmpty()) {
             manager.environment().exportRegistry().register(moduleId, exports, classLoader());
-            builder.append(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
+            sink.accept(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
         }
 
         this.state = ModuleState.LOADED;
-        builder.append(new ModuleLoadDiagnostic.Loaded(moduleId, version));
+        sink.accept(new ModuleLoadDiagnostic.Loaded(moduleId, version));
         return true;
     }
 
     @Override
-    public boolean doStart(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStartDiagnostic> builder) {
+    public boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
         if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
-            builder.append(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
 
@@ -148,7 +148,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (MeshRegisterException ex) {
-            builder.append(new ModuleStartDiagnostic.MeshRegistrationFailed(moduleId, ex));
+            sink.accept(new ModuleStartDiagnostic.MeshRegistrationFailed(moduleId, ex));
         }
 
         if (!success) {
@@ -156,17 +156,17 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             return false;
         }
 
-        builder.append(new ModuleStartDiagnostic.Started(moduleId, version));
+        sink.accept(new ModuleStartDiagnostic.Started(moduleId, version));
         return true;
     }
 
     @Override
-    public boolean doStop(SimpleModuleManager manager, DiagnosticsBuilder<ModuleStopDiagnostic> builder) {
+    public boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
         if (state != ModuleState.STARTED) {
-            builder.append(new ModuleStopDiagnostic.IncorrectState(moduleId));
+            sink.accept(new ModuleStopDiagnostic.IncorrectState(moduleId));
             return false;
         }
 
@@ -184,9 +184,9 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (MeshUnregisterExecuteException ex) {
-            builder.append(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
+            sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
         } catch (MeshContextSelectionException ex) {
-            builder.append(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
+            sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
         }
 
         if (!success) {
@@ -194,17 +194,17 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             return false;
         }
 
-        builder.append(new ModuleStopDiagnostic.Stopped(moduleId, version));
+        sink.accept(new ModuleStopDiagnostic.Stopped(moduleId, version));
         return true;
     }
 
     @Override
-    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticsBuilder<ModuleUnloadDiagnostic> builder) {
+    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
         if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
-            builder.append(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
+            sink.accept(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
             return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
         }
 
@@ -218,7 +218,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             success = true;
 
         } catch (ResolverForgetException ex) {
-            builder.append(new ModuleUnloadDiagnostic.ForgetFailed(moduleId, ex.getDependents()));
+            sink.accept(new ModuleUnloadDiagnostic.ForgetFailed(moduleId, ex.getDependents()));
         }
 
         if (!success) {
@@ -226,7 +226,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
             return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
         }
 
-        builder.append(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
+        sink.accept(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
 
         if (trackClassLoaderOnUnload) {
             manager.leakDetector().track(moduleId, classLoader());

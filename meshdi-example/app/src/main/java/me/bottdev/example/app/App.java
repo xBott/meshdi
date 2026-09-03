@@ -1,6 +1,9 @@
 package me.bottdev.example.app;
 
-import me.bottdev.kern.commons.diagnostic.Diagnostics;
+import lombok.NonNull;
+import me.bottdev.kern.commons.diagnostic.Diagnostic;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSinkFactory;
 import me.bottdev.kern.commons.download.DownloadManager;
 import me.bottdev.kern.commons.download.ParallelDownloadManager;
 import me.bottdev.kern.dependency.DependOrder;
@@ -22,12 +25,12 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.CandidateListException;
 import me.bottdev.meshdi.moduleit.api.library.*;
 import me.bottdev.meshdi.moduleit.api.library.repositories.LocalMavenCache;
-import me.bottdev.meshdi.moduleit.api.library.repositories.RemoteMavenRepository;
+import me.bottdev.meshdi.moduleit.api.library.repositories.MavenRepositoryFactory;
 import me.bottdev.meshdi.moduleit.core.*;
+import me.bottdev.meshdi.moduleit.core.library.RemoteMavenRepositoryFactory;
 import me.bottdev.meshdi.moduleit.core.repository.CompositeModuleRepository;
 import me.bottdev.meshdi.moduleit.core.repository.LocalModuleRepository;
 import org.semver4j.Semver;
-import org.semver4j.range.RangeListFactory;
 
 import java.net.http.HttpClient;
 import java.nio.file.Path;
@@ -103,32 +106,26 @@ public class App {
                 .factory(key(LocalMavenCache.class), config ->
                         config.factory(_ -> new LocalMavenCache("local", Path.of("libraries")))
                 )
+                .construct(key(MavenRepositoryFactory.class), config ->
+                        config.implementation(RemoteMavenRepositoryFactory.class)
+                )
                 .factory(key(MavenRepositoryChain.class), config ->
                         config
-                                .dependsOn(key(HttpClient.class), DependencyLink.REQUIRED, DependOrder.AFTER)
-                                .dependsOn(key(DownloadManager.class), DependencyLink.REQUIRED, DependOrder.AFTER)
                                 .dependsOn(key(LocalMavenCache.class), DependencyLink.REQUIRED, DependOrder.AFTER)
+                                .dependsOn(key(MavenRepositoryFactory.class), DependencyLink.REQUIRED, DependOrder.AFTER)
                                 .factory(resolver -> {
 
-                                    HttpClient httpClient = resolver.get(key(HttpClient.class));
-                                    DownloadManager downloadManager = resolver.get(key(DownloadManager.class));
-                                    LocalMavenCache localCache = resolver.get(key(LocalMavenCache.class));
-
-                                    RemoteMavenRepository mavenCentral = new RemoteMavenRepository(
+                                    MavenRepositoryFactory repositoryFactory = resolver.get(key(MavenRepositoryFactory.class));
+                                    MavenRepository mavenCentral = repositoryFactory.create(
                                             "maven-central",
-                                            "https://repo.maven.apache.org/maven2/",
-                                            httpClient,
-                                            localCache,
-                                            downloadManager
+                                            "https://repo.maven.apache.org/maven2/"
                                     );
 
-                                    RemoteMavenRepository nimbraReposilite = new RemoteMavenRepository(
+                                    MavenRepository nimbraReposilite = repositoryFactory.create(
                                             "nimbra-reposilite",
-                                            "https://reposlite.nimbra.net/snapshots",
-                                            httpClient,
-                                            localCache,
-                                            downloadManager
+                                            "https://reposlite.nimbra.net/snapshots"
                                     );
+                                    LocalMavenCache localCache = resolver.get(key(LocalMavenCache.class));
 
                                     return new MavenRepositoryChain(List.of(localCache, mavenCentral, nimbraReposilite));
                                  })
@@ -141,6 +138,23 @@ public class App {
                 )
                 .construct(key(MavenBatchDownloader.class), config ->
                         config.implementation(MavenBatchDownloader.class)
+                )
+                .factory(key(ModuleLoadEnvironment.class), config ->
+                        config.factory(_ -> SimpleModuleLoadEnvironment.builder()
+                                .apiVersion(Objects.requireNonNull(Semver.parse("1.0.0")))
+                                .apiLoader(App.class.getClassLoader())
+                                .apiPackages(Set.of(
+                                        "me.bottdev.meshdi",
+                                        "me.bottdev.kern"
+                                ))
+                                .exportRegistry(new SimpleModuleExportRegistry())
+                                .diagnosticSinkFactory(new DiagnosticSinkFactory() {
+                                    @Override
+                                    public @NonNull <D extends Diagnostic> DiagnosticSink<D> create() {
+                                        return DiagnosticSink.forwarding(System.out::println);
+                                    }
+                                })
+                                .build())
                 )
                 .build();
 
@@ -157,17 +171,7 @@ public class App {
 
         return SimpleModuleManager.builder()
                 .dependencyResolver(internalContext.autowire(GraphStatefulVersionedDependencyResolver.class))
-                .environment(
-                        SimpleModuleLoadEnvironment.builder()
-                                .apiVersion(Objects.requireNonNull(Semver.parse("1.0.0")))
-                                .apiLoader(App.class.getClassLoader())
-                                .apiPackages(Set.of(
-                                        "me.bottdev.meshdi",
-                                        "me.bottdev.kern"
-                                ))
-                                .exportRegistry(new SimpleModuleExportRegistry())
-                                .build()
-                )
+                .environment(internalContext.get(ModuleLoadEnvironment.class))
                 .libraryLoader(internalContext.autowire(ParallelModuleLibraryLoader.class))
                 .contextMesh(new DagContextMesh())
                 .leakDetector(new AsyncModuleClassLoaderLeakDetector())
@@ -191,14 +195,8 @@ public class App {
             MeshRegisterException
     {
 
-
-        String pathStr = args[0];
-        if (pathStr == null) throw new IllegalArgumentException("repository path must be valid");
-
         Context context = createInternalContext();
         ModuleManager manager = createModuleManager(context);
-
-        System.out.println(context.get(String.class, "name"));
 
         ModuleRepository virtualRepository = new VirtualModuleRepository(
                 VirtualModuleHandle.builder()
@@ -214,11 +212,11 @@ public class App {
                         .trackClassLoaderOnUnload(false)
                         .build()
         );
-        ModuleRepository localRepository = new LocalModuleRepository(Path.of(pathStr));
+        ModuleRepository localRepository = new LocalModuleRepository(Path.of("modules"));
         ModuleRepository compositeRepository = new CompositeModuleRepository(virtualRepository, localRepository);
 
-        Diagnostics<ModuleResolutionDiagnostic> resolutionDiagnostics = manager.resolve(compositeRepository);
-        System.out.println(resolutionDiagnostics);
+        ModuleBatchResult resolutionResult = manager.resolve(compositeRepository);
+        System.out.println("Resolution: " + resolutionResult);
         printModuleInfoTable(manager);
 
         manager.prepareAll()

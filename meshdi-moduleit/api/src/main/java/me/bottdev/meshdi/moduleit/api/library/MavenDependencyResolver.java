@@ -41,7 +41,7 @@ public class MavenDependencyResolver {
                     rootExclusions,
                     "<root>"
             ));
-            context.diagnosticsBuilder().append(
+            context.diagnosticSink().accept(
                     new LibraryLoadDiagnostic.Requested(coordinate)
             );
 
@@ -58,7 +58,7 @@ public class MavenDependencyResolver {
             ResolvedMavenDependency existing = resolved.get(key);
             if (existing != null) {
                 if (existing.depth() <= currentDepth) {
-                    context.diagnosticsBuilder().append(
+                    context.diagnosticSink().accept(
                             new LibraryLoadDiagnostic.VersionConflictResolved(existing.coordinate(), coordinate)
                     );
                     continue;
@@ -69,7 +69,7 @@ public class MavenDependencyResolver {
             try {
                 pomModel = pomResolver.resolveEffectivePom(coordinate, context);
             } catch (PomParseException ex) {
-                context.diagnosticsBuilder().append(
+                context.diagnosticSink().accept(
                         new LibraryLoadDiagnostic.PomParseFailed(coordinate, ex)
                 );
                 continue;
@@ -83,7 +83,7 @@ public class MavenDependencyResolver {
                 
                 String dependencyKey = dependency.groupId() + ":" + dependency.artifactId();
                 if (current.exclusions().contains(dependencyKey)) {
-                    context.diagnosticsBuilder().append(
+                    context.diagnosticSink().accept(
                             new LibraryLoadDiagnostic.DependencyExcluded(
                                     new MavenCoordinate(dependency.groupId(), dependency.artifactId(), dependency.version(), null, "jar"),
                                     currentRequestedBy
@@ -94,7 +94,7 @@ public class MavenDependencyResolver {
 
                 String version = dependency.version();
                 if (version == null) {
-                    context.diagnosticsBuilder().append(new LibraryLoadDiagnostic.VersionUnresolved(coordinate, dependencyKey));
+                    context.diagnosticSink().accept(new LibraryLoadDiagnostic.VersionUnresolved(coordinate, dependencyKey));
                     continue;
                 }
 
@@ -104,7 +104,7 @@ public class MavenDependencyResolver {
                 }
 
                 MavenCoordinate childCoordinate = new MavenCoordinate(dependency.groupId(), dependency.artifactId(), version, null, "jar");
-                context.diagnosticsBuilder().append(
+                context.diagnosticSink().accept(
                         new LibraryLoadDiagnostic.TransitiveDependencyFound(coordinate, childCoordinate)
                 );
 

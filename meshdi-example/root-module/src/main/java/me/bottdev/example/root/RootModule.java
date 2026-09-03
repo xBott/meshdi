@@ -9,7 +9,6 @@ import me.bottdev.meshdi.moduleit.api.annotations.Module;
 @Module(
         id = "root",
         version = "0.0.1",
-        apiVersion = "*",
         exports = { "me.bottdev.example.root" }
 )
 public class RootModule {

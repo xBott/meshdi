@@ -26,7 +26,7 @@ public sealed interface ModuleResolutionDiagnostic extends ModuleDiagnostic perm
 
         @Override
         public DiagnosticSeverity severity() {
-            return DiagnosticSeverity.ERROR;
+            return DiagnosticSeverity.WARN;
         }
 
         @Override

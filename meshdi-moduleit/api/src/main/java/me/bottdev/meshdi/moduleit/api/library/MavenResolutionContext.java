@@ -1,7 +1,7 @@
 package me.bottdev.meshdi.moduleit.api.library;
 
 import lombok.NonNull;
-import me.bottdev.kern.commons.diagnostic.DiagnosticsBuilder;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
 import me.bottdev.meshdi.moduleit.api.diagnostic.LibraryLoadDiagnostic;
 
 import java.util.Map;
@@ -15,10 +15,10 @@ import java.util.Map;
  * @param sharedPomCache  A global, thread-safe cache of parsed raw PomModels.
  *                        Because POMs are immutable, this cache should be shared across all
  *                        resolution contexts to avoid redundant downloading and parsing.
- * @param diagnosticsBuilder     A builder to collect and report diagnostic events during resolution.
+ * @param diagnosticSink     A builder to collect and report diagnostic events during resolution.
  */
 public record MavenResolutionContext(
         @NonNull MavenRepositoryChain repositoryChain,
         @NonNull Map<String, PomModel> sharedPomCache,
-        @NonNull DiagnosticsBuilder<LibraryLoadDiagnostic> diagnosticsBuilder
+        @NonNull DiagnosticSink<LibraryLoadDiagnostic> diagnosticSink
 ) {}
