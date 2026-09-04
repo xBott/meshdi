@@ -41,7 +41,7 @@ public class SimpleModuleManager implements ModuleManager {
 
     private final LinkedHashMap<String, InternalModuleHandle> handles = new LinkedHashMap<>();
     private final Set<Path> sharedLibraries = new HashSet<>();
-    private URLClassLoader sharedLibraryLoader = new URLClassLoader(new URL[0], null);
+    private URLClassLoader sharedLibraryLoader = new URLClassLoader(new URL[0], ClassLoader.getPlatformClassLoader());
 
     @Builder
     public SimpleModuleManager(
@@ -82,7 +82,7 @@ public class SimpleModuleManager implements ModuleManager {
             } catch (MalformedURLException ignored) {}
         }
         
-        this.sharedLibraryLoader = new URLClassLoader(validUrls.toArray(new URL[0]), null);
+        this.sharedLibraryLoader = new URLClassLoader(validUrls.toArray(new URL[0]), ClassLoader.getPlatformClassLoader());
     }
 
     @Override
@@ -312,13 +312,13 @@ public class SimpleModuleManager implements ModuleManager {
         ModuleDescriptor descriptor = handle.descriptor();
         String moduleId = descriptor.id();
 
-        List<URL> isolatedUrls = new ArrayList<>();
+        List<URL> allUrls = new ArrayList<>();
+        allUrls.add(handle.candidate().sourceUrl());
         for (Path libPath : handle.libraries()) {
-            isolatedUrls.add(libPath.toUri().toURL());
+            allUrls.add(libPath.toUri().toURL());
         }
 
         List<ClassProvider> providers = new ArrayList<>(environment.createBaseProviders(moduleId, sharedLibraryLoader));
-        providers.add(new IsolatedLibraryClassProvider(isolatedUrls.toArray(new URL[0])));
 
         List<String> dependencyIds = descriptor.getVersionedDependencies().stream()
                 .map(VersionedDependencyRequest::key)
@@ -326,7 +326,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         return new ModuleClassLoader(
                 moduleId,
-                new URL[]{ handle.candidate().sourceUrl() },
+                allUrls.toArray(new URL[0]),
                 new ClassProviderContainer(providers),
                 dependencyIds
         );
