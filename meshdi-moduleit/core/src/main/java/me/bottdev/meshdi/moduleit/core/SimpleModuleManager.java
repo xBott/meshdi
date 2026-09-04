@@ -39,9 +39,18 @@ public class SimpleModuleManager implements ModuleManager {
     private final ContextMesh contextMesh;
     private final ModuleClassLoaderLeakDetector leakDetector;
 
+    private static class SharedLibraryLoader extends URLClassLoader {
+        public SharedLibraryLoader(URL[] urls, ClassLoader parent) {
+            super(urls, parent);
+        }
+        public void addSharedLibrary(URL url) {
+            super.addURL(url);
+        }
+    }
+
     private final LinkedHashMap<String, InternalModuleHandle> handles = new LinkedHashMap<>();
     private final Set<Path> sharedLibraries = new HashSet<>();
-    private URLClassLoader sharedLibraryLoader = new URLClassLoader(new URL[0], ClassLoader.getPlatformClassLoader());
+    private final SharedLibraryLoader sharedLibraryLoader = new SharedLibraryLoader(new URL[0], ClassLoader.getPlatformClassLoader());
 
     @Builder
     public SimpleModuleManager(
@@ -64,25 +73,13 @@ public class SimpleModuleManager implements ModuleManager {
     void removeHandle(String id) { handles.remove(id); }
 
     public void addSharedLibraries(Collection<Path> paths) {
-        sharedLibraries.addAll(paths);
-        rebuildSharedLibraryLoader();
-    }
-
-    private void rebuildSharedLibraryLoader() {
-        if (sharedLibraryLoader != null) {
-            try {
-                sharedLibraryLoader.close();
-            } catch (IOException ignored) {}
+        for (Path path : paths) {
+            if (sharedLibraries.add(path)) {
+                try {
+                    sharedLibraryLoader.addSharedLibrary(path.toUri().toURL());
+                } catch (MalformedURLException ignored) {}
+            }
         }
-        
-        List<URL> validUrls = new ArrayList<>();
-        for (Path path : sharedLibraries) {
-            try {
-                validUrls.add(path.toUri().toURL());
-            } catch (MalformedURLException ignored) {}
-        }
-        
-        this.sharedLibraryLoader = new URLClassLoader(validUrls.toArray(new URL[0]), ClassLoader.getPlatformClassLoader());
     }
 
     @Override

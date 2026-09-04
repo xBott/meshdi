@@ -40,20 +40,22 @@ import java.util.concurrent.CompletableFuture;
 class SimpleModuleHandle implements InternalModuleHandle {
 
     public static SimpleModuleHandle ofResolved(
-            @NonNull ModuleCandidate candidate
-    ) {
+            @NonNull ModuleCandidate candidate) {
         return new SimpleModuleHandle(candidate);
     }
 
     private final ModuleCandidate candidate;
-    @Setter private ModuleState state = ModuleState.RESOLVED;
-    @Setter private ClassLoader classLoader = null;
-    @Setter private Context context = null;
-    @Setter private List<Path> libraries = List.of();
+    @Setter
+    private ModuleState state = ModuleState.RESOLVED;
+    @Setter
+    private ClassLoader classLoader = null;
+    @Setter
+    private Context context = null;
+    @Setter
+    private List<Path> libraries = List.of();
 
     private SimpleModuleHandle(
-            @NonNull ModuleCandidate candidate
-    ) {
+            @NonNull ModuleCandidate candidate) {
         this.candidate = candidate;
     }
 
@@ -106,7 +108,7 @@ class SimpleModuleHandle implements InternalModuleHandle {
         try {
             ModuleClassLoader classLoader = manager.createClassLoader(this);
             this.classLoader = classLoader;
-            
+
             Set<String> exports = descriptor().exports();
             if (exports != null && !exports.isEmpty()) {
                 manager.environment().exportRegistry().register(moduleId, exports, classLoader);
