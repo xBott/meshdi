@@ -253,6 +253,8 @@ public class SimpleModuleManager implements ModuleManager {
 
     private CompletableFuture<ModuleBatchResult> prepareBatch(List<ModuleHandle> toPrepare) {
 
+        if (toPrepare.isEmpty()) return CompletableFuture.completedFuture(new ModuleBatchResult.Success(0));
+
         List<ModuleHandle> resolved = toPrepare.stream()
                 .filter(handle -> handle.state() == ModuleState.RESOLVED)
                 .toList();
@@ -333,6 +335,8 @@ public class SimpleModuleManager implements ModuleManager {
 
     private ModuleBatchResult loadBatch(List<ModuleHandle> toLoad) {
 
+        if (toLoad.isEmpty()) return new ModuleBatchResult.Success(0);
+
         DiagnosticSink<ModuleLoadDiagnostic> sink = environment.createDiagnosticSink();
         int total = toLoad.size();
         int loaded = 0;
@@ -378,6 +382,8 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private ModuleBatchResult startBatch(List<ModuleHandle> toStart) {
+
+        if (toStart.isEmpty()) return new ModuleBatchResult.Success(0);
 
         DiagnosticSink<ModuleStartDiagnostic> sink = environment.createDiagnosticSink();
         int total = toStart.size();
@@ -434,6 +440,8 @@ public class SimpleModuleManager implements ModuleManager {
 
     private ModuleBatchResult stopBatch(List<ModuleHandle> toStop) {
 
+        if (toStop.isEmpty()) return new ModuleBatchResult.Success(0);
+
         DiagnosticSink<ModuleStopDiagnostic> sink = environment.createDiagnosticSink();
         int total = toStop.size();
         int stopped = 0;
@@ -489,6 +497,9 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private CompletableFuture<ModuleBatchResult> unloadBatch(List<ModuleHandle> toUnload) {
+
+        if (toUnload.isEmpty()) return CompletableFuture.completedFuture(new ModuleBatchResult.Success(0));
+
         DiagnosticSink<ModuleUnloadDiagnostic> sink = environment.createDiagnosticSink();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -566,6 +577,7 @@ public class SimpleModuleManager implements ModuleManager {
     }
 
     private ModuleBatchResult restartBatch(List<ModuleHandle> toRestart) {
+        if (toRestart.isEmpty()) return new ModuleBatchResult.Success(0);
         stopBatch(toRestart);
         return startBatch(toRestart.reversed());
     }
