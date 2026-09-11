@@ -6,42 +6,53 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class MeshUnregisterCommandTest {
 
     @Test
-    @DisplayName("execute: should use consumer for all ordered contexts")
-    void execute_usesConsumer() throws MeshUnregisterExecuteException {
-
-
-        List<String> ordered = List.of("ctxA", "ctxB", "intermediate");
+    @DisplayName("execute: unregisters contexts in order")
+    void execute_inOrder() throws MeshUnregisterExecuteException {
+        // Given
+        List<String> orderedContexts = List.of("ctxA", "ctxB", "ctxC");
         List<String> unregistered = new ArrayList<>();
+        
+        Consumer<String> unregisterHandler = unregistered::add;
+        MeshUnregisterCommand command = new MeshUnregisterCommand(orderedContexts, unregisterHandler);
 
-        MeshUnregisterCommand command = new MeshUnregisterCommand(ordered, unregistered::add);
-
+        // When
         command.execute();
 
+        // Then
         assertThat(unregistered)
                 .hasSize(3)
-                .containsExactly("ctxA", "ctxB", "intermediate");
-
+                .containsExactlyElementsOf(orderedContexts);
     }
 
     @Test
-    @DisplayName("execute: throws domain exception when consumer throws")
-    void execute_throws() {
+    @DisplayName("execute: throws and stops on handler failure")
+    void execute_throwsOnFailure() {
+        // Given
+        List<String> orderedContexts = List.of("ctxA", "ctxB", "ctxC");
+        List<String> unregistered = new ArrayList<>();
+        
+        Consumer<String> failingHandler = contextId -> {
+            if ("ctxB".equals(contextId)) {
+                throw new RuntimeException("Simulated failure");
+            }
+            unregistered.add(contextId);
+        };
+        
+        MeshUnregisterCommand command = new MeshUnregisterCommand(orderedContexts, failingHandler);
 
-        List<String> ordered = List.of("ctxA", "ctxB", "intermediate");
-
-        MeshUnregisterCommand command = new MeshUnregisterCommand(ordered, contextId -> {
-            if (contextId.length() > 4) throw new IllegalArgumentException("Context id is incorrect");
-        });
-
-        assertThrows(MeshUnregisterExecuteException.class, command::execute);
-
+        // When & Then
+        assertThatThrownBy(command::execute)
+                .isInstanceOf(MeshUnregisterExecuteException.class);
+                
+        // Assert that execution stopped at the failing element
+        assertThat(unregistered).containsExactly("ctxA");
     }
-
 }
