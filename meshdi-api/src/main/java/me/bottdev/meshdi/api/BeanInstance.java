@@ -5,4 +5,7 @@ package me.bottdev.meshdi.api;
 /// @param binding the binding metadata
 /// @param value the actual instantiated bean
 /// @param <T> the type of the bean
-public record BeanInstance<T>(Binding<T> binding, T value) {}
+public record BeanInstance<T>(
+        Binding<T> binding,
+        T value
+) {}
