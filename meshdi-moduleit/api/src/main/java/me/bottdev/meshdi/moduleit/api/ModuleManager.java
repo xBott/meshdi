@@ -32,8 +32,10 @@ public interface ModuleManager {
     /// Resolves modules from a provided repository.
     /// Resolved modules are stored in manager with [ModuleState#RESOLVED] state.
     /// @throws CandidateListException when repository failed to list candidates.
-    /// @return BatchResult of resolution process.
-    ModuleBatchResult resolve(ModuleRepository repository) throws CandidateListException;
+    /// @return Result of resolution process: resolved candidates are processed,
+    /// rejected ones (duplicates, API version mismatch, unresolvable dependencies) are failed.
+    /// Candidates of already existing modules are skipped.
+    ModuleBatchResult<ModuleCandidate> resolve(ModuleRepository repository) throws CandidateListException;
 
     /// Tries to prepare a specified module using a concrete group selection strategy.
     /// Loads libraries from Maven Repositories.
@@ -41,39 +43,39 @@ public interface ModuleManager {
     /// @return module prepare command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModulePrepareException if an cause occurred during module preparation.
-    ModuleBatchCommand<CompletableFuture<ModuleBatchResult>> prepare(
+    ModuleBatchCommand<CompletableFuture<ModuleBatchResult<ModuleHandle>>> prepare(
             String id,
             DependencyModuleSelector selector
     ) throws ModulePrepareException;
 
     /// Prepares all modules, that are not ready yet.
     /// @return Completable Future with result of preparation process.
-    CompletableFuture<ModuleBatchResult> prepareAll();
+    CompletableFuture<ModuleBatchResult<ModuleHandle>> prepareAll();
 
     /// Loads modules from a provided repository.
     /// @return module load command.
-    ModuleBatchCommand<ModuleBatchResult> load(
+    ModuleBatchCommand<ModuleBatchResult<ModuleHandle>> load(
             String id,
             DependencyModuleSelector selector
     ) throws ModuleLoadException;
 
     /// Loads all modules that are ready.
     /// @return Result of loading process.
-    ModuleBatchResult loadAll();
+    ModuleBatchResult<ModuleHandle> loadAll();
 
     /// Tries to start a specified module using a concrete group selection strategy.
     /// Module must be loaded before calling stop.
     /// @return module start command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleStartException if an cause occurred during module startup.
-    ModuleBatchCommand<ModuleBatchResult> start(
+    ModuleBatchCommand<ModuleBatchResult<ModuleHandle>> start(
             String id,
             DependencyModuleSelector selector
     ) throws ModuleStartException;
 
     /// Starts all modules, that have not started yet.
     /// @return Result of starting process.
-    ModuleBatchResult startAll();
+    ModuleBatchResult<ModuleHandle> startAll();
 
     /// Tries to stop a specified module using a concrete group selection strategy.
     /// Modules are kept in memory, but its context is disposed.
@@ -81,14 +83,14 @@ public interface ModuleManager {
     /// @return module stop command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleStopException if an cause occurred during module unloading.
-    ModuleBatchCommand<ModuleBatchResult> stop(
+    ModuleBatchCommand<ModuleBatchResult<ModuleHandle>> stop(
             String id,
             DependentModuleSelector selector
     ) throws ModuleStopException;
 
     /// Stops all started modules.
     /// @return Result of stopping process.
-    ModuleBatchResult stopAll();
+    ModuleBatchResult<ModuleHandle> stopAll();
 
     /// Tries to unload a specified module using a concrete group selection strategy.
     /// Modules are completely unloaded from JVM.
@@ -96,21 +98,21 @@ public interface ModuleManager {
     /// @return module unload command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleUnloadException if an cause occurred during module unloading.
-    ModuleBatchCommand<CompletableFuture<ModuleBatchResult>> unload(
+    ModuleBatchCommand<CompletableFuture<ModuleBatchResult<ModuleHandle>>> unload(
             String id,
             DependentModuleSelector selector
     ) throws ModuleUnloadException;
 
     /// Unloads all stopped or just loaded modules.
     /// @return Completable future with result of loading process.
-    CompletableFuture<ModuleBatchResult> unloadAll();
+    CompletableFuture<ModuleBatchResult<ModuleHandle>> unloadAll();
 
     /// Tries to restart a specified module using a concrete group selection strategy.
     /// Module must be started before calling restart.
     /// @return module restart command.
     /// @throws IllegalArgumentException if module not found.
     /// @throws ModuleRestartException if an cause occurred during module restart.
-    ModuleBatchCommand<ModuleBatchResult> restart(
+    ModuleBatchCommand<ModuleBatchResult<ModuleHandle>> restart(
             String id,
             DependentModuleSelector selector
     ) throws ModuleRestartException;
@@ -118,6 +120,6 @@ public interface ModuleManager {
     /// Restarts all modules.
     /// If module is not started, it will be started automatically.
     /// @return Result of restarting process.
-    ModuleBatchResult restartAll();
+    ModuleBatchResult<ModuleHandle> restartAll();
 
 }

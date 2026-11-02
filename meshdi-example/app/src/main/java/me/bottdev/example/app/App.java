@@ -215,7 +215,7 @@ public class App {
         ModuleRepository localRepository = new LocalModuleRepository(Path.of("modules"));
         ModuleRepository compositeRepository = new CompositeModuleRepository(virtualRepository, localRepository);
 
-        ModuleBatchResult resolutionResult = manager.resolve(compositeRepository);
+        ModuleBatchResult<ModuleCandidate> resolutionResult = manager.resolve(compositeRepository);
         System.out.println("Resolution: " + resolutionResult);
         printModuleInfoTable(manager);
 
