@@ -38,7 +38,7 @@ public final class ModuleFixtures {
     public static final Semver MODULE_VERSION = Objects.requireNonNull(Semver.parse("1.0.0"));
 
     public static final ModuleLibrariesResult NO_LIBRARIES =
-            new ModuleLibrariesResult(List.of(), Map.of(), false);
+            new ModuleLibrariesResult(List.of(), Map.of(), Set.of());
 
     private ModuleFixtures() {}
 
@@ -53,6 +53,16 @@ public final class ModuleFixtures {
         @Override
         public URL sourceUrl() {
             return null;
+        }
+
+    }
+
+    /// A candidate backed by a real module jar, so the module can be loaded.
+    public record JarCandidate(ModuleDescriptor descriptor, URL sourceUrl) implements ModuleCandidate {
+
+        @Override
+        public String sourceKey() {
+            return sourceUrl.toString();
         }
 
     }

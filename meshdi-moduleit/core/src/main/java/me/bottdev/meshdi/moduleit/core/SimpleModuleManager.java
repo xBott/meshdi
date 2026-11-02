@@ -17,7 +17,6 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.*;
 import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -26,7 +25,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import me.bottdev.meshdi.moduleit.api.classprovider.ClassProvider;
 import me.bottdev.meshdi.moduleit.api.classprovider.ClassProviderContainer;
-import me.bottdev.meshdi.moduleit.core.classprovider.IsolatedLibraryClassProvider;
 import org.semver4j.Semver;
 import org.semver4j.range.RangeList;
 
@@ -281,19 +279,27 @@ public class SimpleModuleManager implements ModuleManager {
 
         if (resolved.isEmpty()) return CompletableFuture.completedFuture(new ModuleBatchResult.Unchanged<>());
 
-        return libraryLoader.loadAll(resolved).thenApply(result -> {
+        DiagnosticSink<LibraryLoadDiagnostic> sink = environment.createDiagnosticSink();
 
-            if (result.failed()) return new ModuleBatchResult.Failed<>(resolved);
+        return libraryLoader.loadAll(resolved, sink).thenApply(result -> {
 
             addSharedLibraries(result.sharedLibraries());
 
+            List<ModuleHandle> prepared = new ArrayList<>();
+            List<ModuleHandle> failed = new ArrayList<>();
+
             for (ModuleHandle handle : resolved) {
+                if (result.failedModules().contains(handle)) {
+                    failed.add(handle);
+                    continue;
+                }
                 InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
                 List<Path> libraries = result.isolatedLibraries().getOrDefault(handle, List.of());
                 internalHandle.completePreparation(libraries);
+                prepared.add(handle);
             }
 
-            return new ModuleBatchResult.Success<>(resolved);
+            return ModuleBatchResult.of(prepared, failed);
 
         });
 

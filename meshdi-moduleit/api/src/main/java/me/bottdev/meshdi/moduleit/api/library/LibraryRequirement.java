@@ -8,7 +8,7 @@ import lombok.NonNull;
 /// `coordinate` follows Maven GAV syntax: "groupId:artifactId:version".
 /// Unlike ModuleDescriptor.getVersionedDependencies(), this does NOT participate
 /// in the module dependency graph/lifecycle — libraries are leaves, resolved
-/// separately by [MavenDependencyResolver], with their own transitive closure.
+/// separately by a [me.bottdev.meshdi.moduleit.api.ModuleLibraryLoader], with their own transitive closure.
 public record LibraryRequirement(
         @NonNull String coordinate,
         @NonNull LibraryScope scope

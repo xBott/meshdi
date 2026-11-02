@@ -31,6 +31,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
@@ -69,7 +70,7 @@ class SimpleModuleManagerTest {
                 .thenAnswer(invocation -> invocation.<MeshRegistration>getArgument(0).context());
         lenient().when(contextMesh.planUnregister(anyString(), any()))
                 .thenReturn(new MeshUnregisterCommand(List.of(), _ -> {}));
-        lenient().when(libraryLoader.loadAll(any()))
+        lenient().when(libraryLoader.loadAll(any(), any()))
                 .thenReturn(completedFuture(NO_LIBRARIES));
 
         manager = newManager(realResolver());
@@ -332,11 +333,11 @@ class SimpleModuleManagerTest {
             // Given
             ModuleHandle handle = resolvedPlain("a");
             Path library = Path.of("isolated.jar");
-            when(libraryLoader.loadAll(List.of(handle)))
+            when(libraryLoader.loadAll(eq(List.of(handle)), any()))
                     .thenReturn(completedFuture(new ModuleLibrariesResult(
                             List.of(),
                             Map.of(handle, List.of(library)),
-                            false
+                            Set.of()
                     )));
 
             // When
@@ -350,13 +351,13 @@ class SimpleModuleManagerTest {
         }
 
         @Test
-        void shouldReturnFailed_whenLibraryLoadingFails() throws Exception {
+        void shouldReturnFailed_whenLibrariesOfAllModulesFail() throws Exception {
             // Given
             VirtualModuleHandle a = virtual("a");
             VirtualModuleHandle b = virtual("b");
             resolved(a, b);
-            when(libraryLoader.loadAll(any()))
-                    .thenReturn(completedFuture(new ModuleLibrariesResult(List.of(), Map.of(), true)));
+            when(libraryLoader.loadAll(any(), any()))
+                    .thenReturn(completedFuture(new ModuleLibrariesResult(List.of(), Map.of(), Set.of(a, b))));
 
             // When
             ModuleBatchResult<ModuleHandle> result = manager.prepareAll().join();
@@ -366,6 +367,45 @@ class SimpleModuleManagerTest {
             assertThat(result.failed()).containsExactlyInAnyOrder(a, b);
             assertThat(a.state()).isEqualTo(ModuleState.RESOLVED);
             assertThat(b.state()).isEqualTo(ModuleState.RESOLVED);
+        }
+
+        @Test
+        @DisplayName("Only modules whose libraries failed stay RESOLVED; the rest of the batch is prepared")
+        void shouldReturnPartialSuccess_whenLibrariesOfSomeModulesFail() throws Exception {
+            // Given
+            VirtualModuleHandle a = virtual("a");
+            VirtualModuleHandle b = virtual("b");
+            resolved(a, b);
+            when(libraryLoader.loadAll(any(), any()))
+                    .thenReturn(completedFuture(new ModuleLibrariesResult(List.of(), Map.of(), Set.of(a))));
+
+            // When
+            ModuleBatchResult<ModuleHandle> result = manager.prepareAll().join();
+
+            // Then
+            assertThat(result).isInstanceOf(ModuleBatchResult.PartialSuccess.class);
+            assertThat(result.processed()).containsExactly(b);
+            assertThat(result.failed()).containsExactly(a);
+            assertThat(a.state()).isEqualTo(ModuleState.RESOLVED);
+            assertThat(b.state()).isEqualTo(ModuleState.READY);
+        }
+
+        @Test
+        void shouldPrepareModuleAgain_afterItsLibrariesFailed() throws Exception {
+            // Given
+            VirtualModuleHandle a = virtual("a");
+            resolved(a);
+            when(libraryLoader.loadAll(any(), any()))
+                    .thenReturn(completedFuture(new ModuleLibrariesResult(List.of(), Map.of(), Set.of(a))))
+                    .thenReturn(completedFuture(NO_LIBRARIES));
+            manager.prepareAll().join();
+
+            // When
+            ModuleBatchResult<ModuleHandle> retry = manager.prepareAll().join();
+
+            // Then
+            assertThat(retry.processed()).containsExactly(a);
+            assertThat(a.state()).isEqualTo(ModuleState.READY);
         }
 
         @Test
@@ -383,7 +423,7 @@ class SimpleModuleManagerTest {
             // Then
             assertThat(result).isInstanceOf(ModuleBatchResult.Success.class);
             assertThat(result.processed()).containsExactly(b);
-            verify(libraryLoader).loadAll(List.of(b));
+            verify(libraryLoader).loadAll(eq(List.of(b)), any());
         }
 
     }

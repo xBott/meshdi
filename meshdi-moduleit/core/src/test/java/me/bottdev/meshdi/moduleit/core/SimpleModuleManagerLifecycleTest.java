@@ -41,7 +41,7 @@ class SimpleModuleManagerLifecycleTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        when(libraryLoader.loadAll(any())).thenReturn(completedFuture(NO_LIBRARIES));
+        when(libraryLoader.loadAll(any(), any())).thenReturn(completedFuture(NO_LIBRARIES));
 
         contextMesh = new DagContextMesh();
         manager = SimpleModuleManager.builder()
