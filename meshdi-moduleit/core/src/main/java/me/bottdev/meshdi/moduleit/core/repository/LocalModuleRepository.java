@@ -22,7 +22,6 @@ public class LocalModuleRepository implements ModuleRepository {
 
     private final Path directory;
 
-    /// @throws NullPointerException when provided path is null.
     /// @throws IllegalArgumentException when provided path is not a directory.
     public LocalModuleRepository(@NonNull Path directory) {
         try {
