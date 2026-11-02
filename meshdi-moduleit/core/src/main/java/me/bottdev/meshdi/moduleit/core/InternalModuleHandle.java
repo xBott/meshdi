@@ -22,6 +22,9 @@ interface InternalModuleHandle extends ModuleHandle {
 
     boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink);
 
+    /// Unloads the module.
+    /// @return an already completed future with `null` if the module could not be unloaded,
+    /// otherwise a future that completes with the result of the class loader leak check.
     CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink);
 
 }

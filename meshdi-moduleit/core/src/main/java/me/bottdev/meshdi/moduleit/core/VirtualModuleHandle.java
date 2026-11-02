@@ -205,7 +205,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
 
         if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
             sink.accept(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
-            return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
+            return CompletableFuture.completedFuture(null);
         }
 
         this.state = ModuleState.UNLOADING;
@@ -223,7 +223,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
 
         if (!success) {
             this.state = ModuleState.UNLOAD_FAILED;
-            return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
+            return CompletableFuture.completedFuture(null);
         }
 
         sink.accept(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
