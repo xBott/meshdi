@@ -11,7 +11,17 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.*;
 
+/// Class loader of a module. Its own URLs are the module jar and the module's isolated libraries.
+///
+/// Classes and resources are looked up in [ClassProvider] priority order, with the own URLs placed at
+/// [#OWN_CLASSES_PRIORITY]: after platform, API and exported classes of other modules, but before
+/// shared libraries. So a module's isolated library takes precedence over another version of the same
+/// library in the shared class loader (child-first), while API types stay common to all modules.
 public class ModuleClassLoader extends URLClassLoader {
+
+    /// Position of the module's own jar and isolated libraries among the class providers.
+    /// Providers with a higher priority are searched before them, providers with a lower one after them.
+    public static final int OWN_CLASSES_PRIORITY = 750;
 
     static {
         ClassLoader.registerAsParallelCapable();
@@ -63,7 +73,18 @@ public class ModuleClassLoader extends URLClassLoader {
                 return loaded;
             }
 
+            boolean ownSearched = false;
             for (ClassProvider provider : providerContainer.providers()) {
+
+                if (!ownSearched && provider.priority() < OWN_CLASSES_PRIORITY) {
+                    ownSearched = true;
+                    Class<?> own = findOwnClass(name);
+                    if (own != null) {
+                        if (resolve) resolveClass(own);
+                        return own;
+                    }
+                }
+
                 try {
                     Class<?> clazz = provider.provideClass(name);
                     if (clazz != null) {
@@ -75,17 +96,29 @@ public class ModuleClassLoader extends URLClassLoader {
                 }
             }
 
-            try {
-                Class<?> clazz = findClass(name);
-                if (resolve) resolveClass(clazz);
-                return clazz;
-            } catch (ClassNotFoundException ex) {
-                throw enrichedNotFound(name, ex);
+            if (!ownSearched) {
+                Class<?> own = findOwnClass(name);
+                if (own != null) {
+                    if (resolve) resolveClass(own);
+                    return own;
+                }
             }
 
+            throw enrichedNotFound(name, new ClassNotFoundException(
+                    "Class '" + name + "' not found in module jar of '" + moduleId + "'"
+            ));
 
         }
 
+    }
+
+    /// @return class from the module jar or its isolated libraries, or null.
+    private Class<?> findOwnClass(String name) {
+        try {
+            return super.findClass(name);
+        } catch (ClassNotFoundException ex) {
+            return null;
+        }
     }
 
     @Override
@@ -101,34 +134,43 @@ public class ModuleClassLoader extends URLClassLoader {
 
     @Override
     public URL getResource(String name) {
+        boolean ownSearched = false;
         for (ClassProvider provider : providerContainer.providers()) {
+            if (!ownSearched && provider.priority() < OWN_CLASSES_PRIORITY) {
+                ownSearched = true;
+                URL own = findResource(name);
+                if (own != null) return own;
+            }
             URL url = provider.provideResource(name);
             if (url != null) return url;
         }
-        return findResource(name);
+        return ownSearched ? null : findResource(name);
     }
 
     @Override
     public Enumeration<URL> getResources(String name) throws IOException {
         List<URL> results = new ArrayList<>();
-        
+
+        boolean ownSearched = false;
         for (ClassProvider provider : providerContainer.providers()) {
-            Enumeration<URL> urls = provider.provideResources(name);
-            if (urls != null) {
-                while (urls.hasMoreElements()) {
-                    results.add(urls.nextElement());
-                }
+            if (!ownSearched && provider.priority() < OWN_CLASSES_PRIORITY) {
+                ownSearched = true;
+                addAll(results, findResources(name));
             }
+            addAll(results, provider.provideResources(name));
         }
-        
-        Enumeration<URL> own = findResources(name);
-        if (own != null) {
-            while (own.hasMoreElements()) {
-                results.add(own.nextElement());
-            }
+        if (!ownSearched) {
+            addAll(results, findResources(name));
         }
-        
+
         return Collections.enumeration(results);
+    }
+
+    private static void addAll(List<URL> target, Enumeration<URL> urls) {
+        if (urls == null) return;
+        while (urls.hasMoreElements()) {
+            target.add(urls.nextElement());
+        }
     }
 
     @Override
