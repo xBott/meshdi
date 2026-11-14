@@ -3,6 +3,7 @@ package me.bottdev.meshdi.api;
 import me.bottdev.kern.commons.Disposable;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
+import me.bottdev.meshdi.api.exceptions.BeanLifecycleEventHandleException;
 
 import java.util.List;
 
@@ -13,6 +14,9 @@ import java.util.List;
 public interface BeanScope extends Disposable {
 
     /// Retrieves the list of managed bean instances in the order they should be destroyed.
+    ///
+    /// Scopes that do not keep their instances (prototype) return an empty list:
+    /// such beans are unmanaged after creation and their owner is responsible for releasing them.
     ///
     /// @return the list of bean instances
     List<BeanInstance<?>> getDestroyOrder();
@@ -31,13 +35,33 @@ public interface BeanScope extends Disposable {
     /// @return the bean instance metadata wrapper
     <T> BeanInstance<T> get(TypedKey<T> key);
 
-    /// Creates or retrieves a bean instance according to the rules of this scope.
+    /// Creates a new bean instance according to the rules of this scope.
+    ///
+    /// The scope instantiates the bean, fires [BeanLifecycleEventType#POST_CONSTRUCT] and only then
+    /// makes the instance visible to other callers, so a half-initialised bean is never published.
     ///
     /// @param binding the binding defining the bean creation rules
     /// @param resolver the resolver to satisfy dependencies
     /// @param <T> the type of the bean
-    /// @return the instantiated or cached bean
+    /// @return the instantiated bean
+    /// @throws BeanCreationException if an error occurs during instantiation,
+    /// or the scope already holds an instance for the binding
+    /// @throws BeanLifecycleEventHandleException if the `POST_CONSTRUCT` handler fails
+    <T> T create(Binding<T> binding, BeanResolver resolver)
+            throws BeanCreationException, BeanLifecycleEventHandleException;
+
+    /// Atomically returns the instance this scope holds for the binding, creating it when absent.
+    ///
+    /// Concurrent callers for the same binding observe a single creation and all receive
+    /// the same, fully initialised instance. Scopes that do not cache (prototype) create a new instance.
+    ///
+    /// @param binding the binding defining the bean creation rules
+    /// @param resolver the resolver to satisfy dependencies
+    /// @param <T> the type of the bean
+    /// @return the cached or newly created bean
     /// @throws BeanCreationException if an error occurs during instantiation
-    <T> T create(Binding<T> binding, BeanResolver resolver) throws BeanCreationException;
+    /// @throws BeanLifecycleEventHandleException if the `POST_CONSTRUCT` handler fails
+    <T> T getOrCreate(Binding<T> binding, BeanResolver resolver)
+            throws BeanCreationException, BeanLifecycleEventHandleException;
 
 }
