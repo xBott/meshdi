@@ -9,7 +9,10 @@ import me.bottdev.kern.dependency.simple.graph.GraphDependencyResolver;
 import me.bottdev.kern.struct.algorithms.cycle.SimpleCycleDetector;
 import me.bottdev.kern.struct.algorithms.sort.KahnSorter;
 import me.bottdev.meshdi.api.*;
+import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
+import me.bottdev.meshdi.api.diagnostic.BeanDestroyFailed;
 import me.bottdev.meshdi.api.exceptions.BindingBuildException;
+import me.bottdev.meshdi.api.exceptions.DuplicateBindingException;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.core.SimpleBeanLifecycleManager;
 import me.bottdev.meshdi.core.SimpleBindingContainer;
@@ -22,7 +25,8 @@ import me.bottdev.meshdi.core.resolvers.SimpleBeanResolver;
 import me.bottdev.meshdi.core.scopes.PrototypeScope;
 import me.bottdev.meshdi.core.scopes.SingletonScope;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -38,11 +42,8 @@ public class SimpleContextBuilder implements ContextBuilder {
     private BeanLifecycleManager lifecycleManager;
 
     public SimpleContextBuilder() {
-        this.bindingBuilders = new HashMap<>();
-        Registry<ScopeType, BeanScope> scopeRegistry = new SimpleRegistry<>();
-        scopeRegistry.register(ScopeType.SINGLETON, new SingletonScope());
-        scopeRegistry.register(ScopeType.PROTOTYPE, new PrototypeScope());
-        this.lifecycleManager = new SimpleBeanLifecycleManager(scopeRegistry);
+        this.bindingBuilders = new LinkedHashMap<>();
+        this.lifecycleManager = new SimpleBeanLifecycleManager(defaultScopes());
     }
 
     @Override
@@ -59,8 +60,31 @@ public class SimpleContextBuilder implements ContextBuilder {
 
     @Override
     public <T> SimpleContextBuilder binding(@NonNull BindingBuilder<T> bindingBuilder) {
+        TypedKey<T> key = bindingBuilder.getKey();
+        if (bindingBuilders.putIfAbsent(key, bindingBuilder) != null) {
+            throw new DuplicateBindingException(key);
+        }
+        return this;
+    }
+
+    @Override
+    public <T> SimpleContextBuilder override(@NonNull BindingBuilder<T> bindingBuilder) {
         bindingBuilders.put(bindingBuilder.getKey(), bindingBuilder);
         return this;
+    }
+
+    /// Sets the sink that receives beans that failed to be destroyed when the context is disposed.
+    /// Replaces the lifecycle manager with a default one that reports to the sink.
+    public SimpleContextBuilder destroyFailureSink(@NonNull DiagnosticSink<BeanDestroyFailed> sink) {
+        this.lifecycleManager = new SimpleBeanLifecycleManager(defaultScopes(), sink);
+        return this;
+    }
+
+    private static Registry<ScopeType, BeanScope> defaultScopes() {
+        Registry<ScopeType, BeanScope> scopeRegistry = new SimpleRegistry<>();
+        scopeRegistry.register(ScopeType.SINGLETON, new SingletonScope());
+        scopeRegistry.register(ScopeType.PROTOTYPE, new PrototypeScope());
+        return scopeRegistry;
     }
 
     @Override
@@ -85,12 +109,16 @@ public class SimpleContextBuilder implements ContextBuilder {
 
     @Override
     public Map<TypedKey<?>, BindingBuilder<?>> bindings() {
-        return Map.copyOf(bindingBuilders);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(bindingBuilders));
     }
 
     @Override
     public ContextBuilder merge(@NonNull ContextBuilder other) {
+        // Check everything first, so a duplicate does not leave this builder half-merged.
         Map<TypedKey<?>, BindingBuilder<?>> otherBindings = other.bindings();
+        for (TypedKey<?> key : otherBindings.keySet()) {
+            if (bindingBuilders.containsKey(key)) throw new DuplicateBindingException(key);
+        }
         bindingBuilders.putAll(otherBindings);
         return this;
     }
@@ -112,9 +140,21 @@ public class SimpleContextBuilder implements ContextBuilder {
                 bindings.put(key, binding);
             }
 
-            BindingContainer bindingContainer = new SimpleBindingContainer(bindings);
-            dependencyResolver.resolve(bindingContainer).unwrapOrThrow();
+            // Validates the graph (missing, duplicate, circular) and yields the topological order.
+            List<Binding<?>> ordered = dependencyResolver
+                    .resolve(new SimpleBindingContainer(bindings))
+                    .unwrapOrThrow()
+                    .ordered();
 
+            // Bindings are stored in that order, so eager beans are initialised dependencies-first.
+            Map<TypedKey<?>, Binding<?>> orderedBindings = new LinkedHashMap<>();
+            for (Binding<?> binding : ordered) {
+                orderedBindings.put(binding.getKey(), binding);
+            }
+            // Keep anything the resolver did not return, in registration order.
+            bindings.forEach(orderedBindings::putIfAbsent);
+
+            BindingContainer bindingContainer = new SimpleBindingContainer(orderedBindings);
             BeanResolver resolver = resolverFactory.apply(bindingContainer);
             return new SimpleContext(id, bindingContainer, lifecycleManager, resolver);
 

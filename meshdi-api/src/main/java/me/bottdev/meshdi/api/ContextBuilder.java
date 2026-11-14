@@ -31,7 +31,16 @@ public interface ContextBuilder {
     /// @param bindingBuilder the binding builder to register
     /// @param <T> the type of the bean
     /// @return this builder instance
+    /// @throws me.bottdev.meshdi.api.exceptions.DuplicateBindingException if a binding with the same key
+    /// is already registered. Use [#override(BindingBuilder)] to replace it on purpose.
     <T> ContextBuilder binding(@NonNull BindingBuilder<T> bindingBuilder);
+
+    /// Registers a custom binding builder, replacing a binding with the same key if one exists.
+    ///
+    /// @param bindingBuilder the binding builder to register
+    /// @param <T> the type of the bean
+    /// @return this builder instance
+    <T> ContextBuilder override(@NonNull BindingBuilder<T> bindingBuilder);
 
     /// Registers a factory binding.
     ///
