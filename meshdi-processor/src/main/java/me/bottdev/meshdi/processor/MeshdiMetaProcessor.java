@@ -298,9 +298,13 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
             ClassName dependencyClassName = ClassName.bestGuess(getDependencyTypeName(dependency));
             Optional<String> qualifier = getDependencyQualifier(dependency);
 
+            // Required dependencies fail fast, optional ones are injected as null when absent.
+            String resolve = dependency.link() == DependencyLink.OPTIONAL
+                    ? "resolver.find(%s).orElse(null)"
+                    : "resolver.get(%s)";
             if (qualifier.isPresent()) {
                 builder.addStatement(
-                        "$T dependency$L = resolver.get($T.key($T.class, $S))",
+                        "$T dependency$L = " + resolve.formatted("$T.key($T.class, $S)"),
                         dependencyClassName,
                         i,
                         KeyUtils.class,
@@ -309,7 +313,7 @@ public class MeshdiMetaProcessor extends AbstractMetaProcessor {
                 );
             } else {
                 builder.addStatement(
-                        "$T dependency$L = resolver.get($T.key($T.class))",
+                        "$T dependency$L = " + resolve.formatted("$T.key($T.class)"),
                         dependencyClassName,
                         i,
                         KeyUtils.class,

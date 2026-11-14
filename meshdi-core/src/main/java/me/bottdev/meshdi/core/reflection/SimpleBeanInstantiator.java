@@ -16,7 +16,7 @@ public class SimpleBeanInstantiator<T> extends AbstractBeanInstantiator<T> {
     @Override
     public T instantiate(BeanResolver resolver) throws BeanCreationException {
         Object[] args = dependencies.stream()
-                .map(request -> resolver.get((TypedKey<?>) request.key()))
+                .map(request -> resolveDependency(resolver, request))
                 .toArray();
         try {
             return constructor.newInstance(args);

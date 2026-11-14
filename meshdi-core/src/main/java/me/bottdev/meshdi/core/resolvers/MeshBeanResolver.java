@@ -8,6 +8,10 @@ import me.bottdev.meshdi.api.exceptions.BeanResolvationException;
 
 import java.util.Optional;
 
+/// Resolver of a context registered in a [ContextMesh].
+///
+/// Local bindings win. Keys that are not bound locally are looked up in the contexts visible through the mesh,
+/// and the bean is created by its owner context, so it follows the owner's lifecycle.
 @RequiredArgsConstructor
 public class MeshBeanResolver implements BeanResolver {
 
@@ -24,49 +28,18 @@ public class MeshBeanResolver implements BeanResolver {
 
     @Override
     public <T> T get(TypedKey<T> key) {
-
-        if (bindingContainer.containsBinding(key)) {
-
-            Binding<T> binding = bindingContainer.getBinding(key);
-
-            try {
-                return lifecycleManager.getOrCreate(binding, this);
-
-            } catch (BeanLifecycleException ex) {
-                throw new BeanResolvationException(key, "Could not create bean " + key + ".", ex);
-
-            }
-        }
-
-        Optional<ContextMeshLookup<T>> lookupOptional = mesh.lookup(contextId, key);
-        if (lookupOptional.isPresent()) {
-            ContextMeshLookup<T> lookup = lookupOptional.get();
-
-            try {
-                BeanLifecycleManager targetLifecycleManager = lookup.owner().lifecycleManager();
-                BeanResolver targetResolver = lookup.owner().resolver();
-                Binding<T> targetBinding = lookup.binding();
-
-                return targetLifecycleManager.getOrCreate(targetBinding, targetResolver);
-
-            } catch (BeanLifecycleException ex) {
-                throw new BeanResolvationException(key, "Could not create bean " + key + " found in mesh.", ex);
-
-            }
-        }
-
-        return null;
+        return find(key).orElseThrow(() -> new BeanResolvationException(
+                key, "No binding found for " + key + " in context \"" + contextId + "\" or the contexts it sees."
+        ));
     }
 
     @Override
     public <T> Optional<T> find(TypedKey<T> key) {
 
-        if (bindingContainer.containsBinding(key)) {
-            Binding<T> binding = bindingContainer.getBinding(key);
-
+        Binding<T> binding = bindingContainer.getBinding(key);
+        if (binding != null) {
             try {
-                T value = lifecycleManager.getOrCreate(binding, this);
-                return Optional.of(value);
+                return Optional.of(lifecycleManager.getOrCreate(binding, this));
 
             } catch (BeanLifecycleException ex) {
                 throw new BeanResolvationException(key, "Could not create bean " + key + ".", ex);
@@ -75,29 +48,24 @@ public class MeshBeanResolver implements BeanResolver {
         }
 
         Optional<ContextMeshLookup<T>> lookupOptional = mesh.lookup(contextId, key);
-        if (lookupOptional.isPresent()) {
-            ContextMeshLookup<T> lookup = lookupOptional.get();
+        if (lookupOptional.isEmpty()) return Optional.empty();
 
-            try {
-                BeanLifecycleManager targetLifecycleManager = lookup.owner().lifecycleManager();
-                BeanResolver targetResolver = lookup.owner().resolver();
-                Binding<T> targetBinding = lookup.binding();
+        ContextMeshLookup<T> lookup = lookupOptional.get();
+        try {
+            BeanLifecycleManager targetLifecycleManager = lookup.owner().lifecycleManager();
+            BeanResolver targetResolver = lookup.owner().resolver();
+            return Optional.of(targetLifecycleManager.getOrCreate(lookup.binding(), targetResolver));
 
-                T value = targetLifecycleManager.getOrCreate(targetBinding, targetResolver);
-                return Optional.of(value);
+        } catch (BeanLifecycleException ex) {
+            throw new BeanResolvationException(key, "Could not create bean " + key + " found in mesh.", ex);
 
-            } catch (BeanLifecycleException ex) {
-                throw new BeanResolvationException(key, "Could not create bean " + key + " found in mesh.", ex);
-
-            }
         }
-
-        return Optional.empty();
     }
 
     @Override
     public <T> Binding<T> getBinding(TypedKey<T> key) {
-        if (bindingContainer.containsBinding(key)) return bindingContainer.getBinding(key);
+        Binding<T> binding = bindingContainer.getBinding(key);
+        if (binding != null) return binding;
         return mesh.lookup(contextId, key).map(ContextMeshLookup::binding).orElse(null);
     }
 

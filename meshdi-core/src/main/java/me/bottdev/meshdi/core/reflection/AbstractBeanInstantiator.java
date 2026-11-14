@@ -7,6 +7,7 @@ import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.DependencyRequest;
 import me.bottdev.kern.dependency.simple.SimpleDependencyRequest;
+import me.bottdev.meshdi.api.BeanResolver;
 import me.bottdev.meshdi.api.annotations.Dependency;
 import me.bottdev.meshdi.api.annotations.Inject;
 import me.bottdev.meshdi.api.exceptions.BeanConstructorException;
@@ -79,6 +80,18 @@ public abstract class AbstractBeanInstantiator<T> implements BeanInstantiator<T>
         return Arrays.stream(constructor.getParameters())
                 .map(this::getParameterDependencyRequest)
                 .toList();
+    }
+
+    /// Resolves one constructor argument.
+    ///
+    /// @return the bean, or `null` only for a [DependencyLink#OPTIONAL] dependency that is not bound.
+    /// @throws me.bottdev.meshdi.api.exceptions.BeanResolvationException if a required dependency is not bound.
+    protected Object resolveDependency(BeanResolver resolver, DependencyRequest<TypedKey<?>> request) {
+        TypedKey<?> key = request.key();
+        if (request.link() == DependencyLink.OPTIONAL) {
+            return resolver.find(key).orElse(null);
+        }
+        return resolver.get(key);
     }
 
     @Override

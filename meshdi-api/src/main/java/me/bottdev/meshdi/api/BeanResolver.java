@@ -18,8 +18,9 @@ public interface BeanResolver {
     ///
     /// @param key the typed key identifying the bean
     /// @param <T> the type of the bean
-    /// @return the resolved bean instance
-    /// @throws me.bottdev.meshdi.api.exceptions.BeanResolvationException if the bean cannot be resolved
+    /// @return the resolved bean instance, never `null`
+    /// @throws me.bottdev.meshdi.api.exceptions.BeanResolvationException if no binding exists for the key
+    /// or the bean cannot be created. Use [#find(TypedKey)] for beans that may be absent.
     <T> T get(TypedKey<T> key);
 
     /// Attempts to retrieve a bean instance, returning an empty [Optional] if not found.
@@ -33,8 +34,7 @@ public interface BeanResolver {
     ///
     /// @param key the typed key identifying the binding
     /// @param <T> the type of the bean
-    /// @return the associated binding
-    /// @throws me.bottdev.meshdi.api.exceptions.BeanResolvationException if the binding cannot be found
+    /// @return the associated binding, or `null` if no binding exists for the key
     <T> Binding<T> getBinding(TypedKey<T> key);
 
 }

@@ -10,10 +10,13 @@ import java.lang.annotation.Target;
 
 /// Provides additional configuration for an injected dependency.
 ///
-/// Can be applied to a constructor parameter or an injected field to specify
+/// Can be applied to a constructor parameter to specify
 /// qualifiers, requirement links (e.g., required or optional), and initialization order.
+///
+/// A [DependencyLink#REQUIRED] dependency that cannot be resolved fails the creation of the bean,
+/// a [DependencyLink#OPTIONAL] one is injected as `null`.
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.PARAMETER, ElementType.FIELD})
+@Target(ElementType.PARAMETER)
 public @interface Dependency {
 
     /// An optional string qualifier to identify the specific bean if multiple
