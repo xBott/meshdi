@@ -8,6 +8,10 @@ public interface ModuleExportRegistry {
 
     boolean isRegistered(String id);
 
+    /// Registers the packages a module exports. Does nothing if the module is already registered.
+    ///
+    /// @throws me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException if a package is already
+    /// exported by another module. A package has exactly one exporter, so nobody can shadow it.
     void register(String id, Set<String> packages, ClassLoader classLoader);
 
     void unregister(String id);

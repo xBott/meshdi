@@ -3,23 +3,10 @@ package me.bottdev.meshdi.moduleit.core;
 import lombok.NonNull;
 import lombok.Setter;
 import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
+import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
 import me.bottdev.meshdi.api.Context;
-import java.nio.file.Path;
-import java.util.List;
-
-import me.bottdev.meshdi.api.exceptions.ContextBootstrapException;
-import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
-import me.bottdev.meshdi.moduleit.api.ModuleCandidate;
-import me.bottdev.meshdi.moduleit.api.ModuleClassLoader;
-import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
-
-import me.bottdev.meshdi.moduleit.api.ModuleState;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
-import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
-
 import me.bottdev.meshdi.api.MeshRegistration;
+import me.bottdev.meshdi.api.exceptions.ContextBootstrapException;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
 import me.bottdev.meshdi.api.exceptions.ContextStartException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
@@ -27,17 +14,49 @@ import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshUnregisterExecuteException;
 import me.bottdev.meshdi.core.SimpleContextBootstrap;
 import me.bottdev.meshdi.core.mesh.MeshContextSelectionStrategies;
-import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
-import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
+import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
+import me.bottdev.meshdi.moduleit.api.ModuleCandidate;
+import me.bottdev.meshdi.moduleit.api.ModuleClassLoader;
+import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
+import me.bottdev.meshdi.moduleit.api.ModuleState;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleLoadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStartDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleStopDiagnostic;
+import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException;
+import me.bottdev.meshdi.moduleit.core.ModuleHandleSupport.ContextClassLoaderScope;
 import org.semver4j.Semver;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.net.MalformedURLException;
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
+import java.nio.file.Path;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
+/// Handle of a module loaded from a jar with its own class loader.
+///
+/// ## States
+/// Failed states are recoverable: a failed start is rolled back completely, so the module can be started
+/// again or unloaded; a failed stop keeps the context so the stop can be retried; a failed unload can be
+/// retried once its dependents are gone.
+///
+/// ## Thread safety
+/// Transitions are synchronized on the handle and state is published through volatile fields,
+/// so any thread can read a handle while the manager drives it.
 class SimpleModuleHandle implements InternalModuleHandle {
+
+    private static final Set<ModuleState> STARTABLE = EnumSet.of(
+            ModuleState.LOADED, ModuleState.STOPPED, ModuleState.START_FAILED, ModuleState.UNLOAD_FAILED
+    );
+    private static final Set<ModuleState> STOPPABLE = EnumSet.of(
+            ModuleState.STARTED, ModuleState.STOP_FAILED
+    );
+    private static final Set<ModuleState> UNLOADABLE = EnumSet.of(
+            ModuleState.STOPPED, ModuleState.LOADED, ModuleState.START_FAILED, ModuleState.UNLOAD_FAILED
+    );
 
     public static SimpleModuleHandle ofResolved(
             @NonNull ModuleCandidate candidate) {
@@ -45,14 +64,15 @@ class SimpleModuleHandle implements InternalModuleHandle {
     }
 
     private final ModuleCandidate candidate;
+
     @Setter
-    private ModuleState state = ModuleState.RESOLVED;
+    private volatile ModuleState state = ModuleState.RESOLVED;
     @Setter
-    private ClassLoader classLoader = null;
+    private volatile ClassLoader classLoader = null;
     @Setter
-    private Context context = null;
+    private volatile Context context = null;
     @Setter
-    private List<Path> libraries = List.of();
+    private volatile List<Path> libraries = List.of();
 
     private SimpleModuleHandle(
             @NonNull ModuleCandidate candidate) {
@@ -90,13 +110,14 @@ class SimpleModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public void completePreparation(List<Path> libraries) {
-        this.libraries = libraries;
+    public synchronized void completePreparation(List<Path> libraries) {
+        this.libraries = List.copyOf(libraries);
         this.state = ModuleState.READY;
     }
 
     @Override
-    public boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
+    public synchronized boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
+
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
@@ -105,151 +126,235 @@ class SimpleModuleHandle implements InternalModuleHandle {
             return false;
         }
 
+        ModuleClassLoader classLoader;
         try {
-            ModuleClassLoader classLoader = manager.createClassLoader(this);
-            this.classLoader = classLoader;
-
-            Set<String> exports = descriptor().exports();
-            if (exports != null && !exports.isEmpty()) {
-                manager.environment().exportRegistry().register(moduleId, exports, classLoader);
-                sink.accept(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
-            }
-
-            this.state = ModuleState.LOADED;
-            sink.accept(new ModuleLoadDiagnostic.Loaded(moduleId, version));
-            return true;
+            classLoader = manager.createClassLoader(this);
 
         } catch (MalformedURLException ex) {
             sink.accept(new ModuleLoadDiagnostic.MalformedLibraryUrl(moduleId, Path.of(ex.getMessage()), ex));
             return false;
         }
+
+        Set<String> exports = descriptor().exports();
+        if (exports != null && !exports.isEmpty()) {
+            try {
+                manager.environment().exportRegistry().register(moduleId, exports, classLoader);
+
+            } catch (ModuleExportConflictException ex) {
+                closeQuietly(classLoader);
+                sink.accept(new ModuleLoadDiagnostic.ExportConflict(moduleId, ex));
+                return false;
+            }
+            sink.accept(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
+        }
+
+        this.classLoader = classLoader;
+        this.state = ModuleState.LOADED;
+
+        sink.accept(new ModuleLoadDiagnostic.Loaded(moduleId, version));
+        return true;
     }
 
     @Override
-    public boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
+    public synchronized boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
+
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
+        ClassLoader moduleLoader = this.classLoader;
 
-        if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
+        if (!STARTABLE.contains(state) || moduleLoader == null) {
             sink.accept(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
 
         this.state = ModuleState.STARTING;
 
-        boolean success = false;
-        try {
-            Context moduleContext = SimpleContextBootstrap.bootstrap(this.classLoader)
+        // What has to be undone if a later step fails.
+        Context builtContext = null;
+        Context registeredContext = null;
+
+        try (ContextClassLoaderScope _ = ModuleHandleSupport.contextClassLoader(moduleLoader)) {
+
+            builtContext = SimpleContextBootstrap.bootstrap(moduleLoader)
                     .id(moduleId)
                     .build();
 
-            List<String> sees = descriptor().getVersionedDependencies().stream()
-                    .map(VersionedDependencyRequest::key)
-                    .toList();
+            List<String> sees = ModuleHandleSupport.visibleContextIds(descriptor(), manager.contextMesh());
+            registeredContext = manager.contextMesh().register(new MeshRegistration(builtContext, sees));
 
-            MeshRegistration registration = new MeshRegistration(moduleContext, sees);
-            Context meshViewContext = manager.contextMesh().register(registration);
+            registeredContext.start();
 
-            meshViewContext.start();
-
-            this.context = meshViewContext;
+            this.context = registeredContext;
             this.state = ModuleState.STARTED;
-            success = true;
+
+            sink.accept(new ModuleStartDiagnostic.Started(moduleId, version));
+            return true;
 
         } catch (ContextBootstrapException ex) {
             sink.accept(new ModuleStartDiagnostic.BootstrapFailed(moduleId, ex));
+
         } catch (ContextBuildException ex) {
             sink.accept(new ModuleStartDiagnostic.BuildFailed(moduleId, ex));
+
         } catch (ContextStartException ex) {
             sink.accept(new ModuleStartDiagnostic.ContextNotStarted(moduleId, ex));
+
         } catch (MeshRegisterException ex) {
             sink.accept(new ModuleStartDiagnostic.MeshRegistrationFailed(moduleId, ex));
+
+        } catch (RuntimeException | LinkageError ex) {
+            // Module code runs here (definitions, eager beans), so anything can come out of it.
+            if (builtContext == null) {
+                sink.accept(new ModuleStartDiagnostic.BootstrapFailed(moduleId, ex));
+            } else {
+                sink.accept(new ModuleStartDiagnostic.ContextNotStarted(moduleId, ex));
+            }
         }
 
-        if (!success) {
-            this.context = null;
-            this.state = ModuleState.START_FAILED;
-            return false;
+        rollbackStart(manager, moduleId, moduleLoader, builtContext, registeredContext, sink);
+
+        this.context = null;
+        this.state = ModuleState.START_FAILED;
+        return false;
+    }
+
+    /// Undoes a partially completed start: removes the context from the mesh and disposes it together with
+    /// every bean that was already created, so the module can be started again or unloaded.
+    private void rollbackStart(
+            SimpleModuleManager manager,
+            String moduleId,
+            ClassLoader moduleLoader,
+            Context builtContext,
+            Context registeredContext,
+            DiagnosticSink<ModuleStartDiagnostic> sink
+    ) {
+        if (registeredContext != null) {
+            try {
+                manager.contextMesh()
+                        .planUnregister(registeredContext.id(), MeshContextSelectionStrategies.CASCADE)
+                        .execute();
+
+            } catch (MeshContextSelectionException | MeshUnregisterExecuteException | RuntimeException ex) {
+                sink.accept(new ModuleStartDiagnostic.RollbackFailed(moduleId, ex));
+            }
         }
 
-        sink.accept(new ModuleStartDiagnostic.Started(moduleId, version));
-        return true;
+        Context toDispose = registeredContext != null ? registeredContext : builtContext;
+        if (toDispose != null) {
+            try (ContextClassLoaderScope _ = ModuleHandleSupport.contextClassLoader(moduleLoader)) {
+                toDispose.dispose();
+
+            } catch (RuntimeException ex) {
+                sink.accept(new ModuleStartDiagnostic.RollbackFailed(moduleId, ex));
+            }
+        }
     }
 
     @Override
-    public boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
+    public synchronized boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
+
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
-        if (state != ModuleState.STARTED) {
+        if (!STOPPABLE.contains(state)) {
             sink.accept(new ModuleStopDiagnostic.IncorrectState(moduleId));
             return false;
         }
 
+        boolean retry = state == ModuleState.STOP_FAILED;
+        Context stopping = this.context;
+
         this.state = ModuleState.STOPPING;
-        String contextId = this.context.id();
-        boolean success = false;
 
-        try {
-            manager.contextMesh().planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
-            this.context.dispose();
+        if (stopping != null) {
+            String contextId = stopping.id();
 
-            this.state = ModuleState.STOPPED;
-            this.context = null;
-            success = true;
+            // A retry may find the context already removed from the mesh by the previous attempt.
+            if (!retry || manager.contextMesh().contains(contextId)) {
+                try {
+                    manager.contextMesh().planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
 
-        } catch (MeshUnregisterExecuteException ex) {
-            sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
-        } catch (MeshContextSelectionException ex) {
-            sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
+                } catch (MeshUnregisterExecuteException ex) {
+                    sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
+                    this.state = ModuleState.STOP_FAILED;
+                    return false;
+
+                } catch (MeshContextSelectionException ex) {
+                    sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
+                    this.state = ModuleState.STOP_FAILED;
+                    return false;
+                }
+            }
+
+            try (ContextClassLoaderScope _ = ModuleHandleSupport.contextClassLoader(this.classLoader)) {
+                stopping.dispose();
+
+            } catch (RuntimeException ex) {
+                sink.accept(new ModuleStopDiagnostic.ContextDisposeFailed(moduleId, ex));
+                this.state = ModuleState.STOP_FAILED;
+                return false;
+            }
         }
 
-        if (!success) {
-            this.context = null;
-            this.state = ModuleState.STOP_FAILED;
-            return false;
-        }
+        this.context = null;
+        this.state = ModuleState.STOPPED;
 
         sink.accept(new ModuleStopDiagnostic.Stopped(moduleId, version));
         return true;
     }
 
     @Override
-    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
+    public synchronized CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
+
         String moduleId = descriptor().id();
         Semver version = descriptor().semver();
 
-        if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
+        if (!UNLOADABLE.contains(state)) {
             sink.accept(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
             return CompletableFuture.completedFuture(null);
         }
 
         this.state = ModuleState.UNLOADING;
-        boolean success = false;
 
         try {
             manager.dependencyResolver().state().forget(moduleId);
-            manager.environment().exportRegistry().unregister(moduleId);
-            manager.removeHandle(moduleId);
-            success = true;
 
         } catch (ResolverForgetException ex) {
+            // Nothing was changed: the class loader stays open, so the module can still be started,
+            // and the unload can be retried once the dependents are unloaded.
             sink.accept(new ModuleUnloadDiagnostic.ForgetFailed(moduleId, ex.getDependents()));
-        }
-
-        if (!success) {
-            this.context = null;
             this.state = ModuleState.UNLOAD_FAILED;
             return CompletableFuture.completedFuture(null);
         }
 
+        manager.environment().exportRegistry().unregister(moduleId);
+        manager.removeHandle(moduleId);
+
         ClassLoader unloadedClassLoader = this.classLoader;
         this.classLoader = null;
+        this.context = null;
+        this.libraries = List.of();
 
-        manager.leakDetector().track(moduleId, unloadedClassLoader);
+        // Release jar file handles now instead of waiting for GC, so the jar can be replaced right away.
+        closeQuietly(unloadedClassLoader);
+
         sink.accept(new ModuleUnloadDiagnostic.Unloaded(moduleId, version));
 
-        return manager.leakDetector().awaitUnloadAsync(moduleId, Duration.of(10, ChronoUnit.SECONDS));
+        if (unloadedClassLoader == null) {
+            return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
+        }
+        manager.leakDetector().track(moduleId, unloadedClassLoader);
+        return manager.leakDetector().awaitUnloadAsync(moduleId, manager.leakCheckTimeout());
+    }
+
+    private static void closeQuietly(ClassLoader classLoader) {
+        if (classLoader instanceof Closeable closeable) {
+            try {
+                closeable.close();
+            } catch (IOException ignored) {
+                // The loader is unreachable after unload either way.
+            }
+        }
     }
 
 }

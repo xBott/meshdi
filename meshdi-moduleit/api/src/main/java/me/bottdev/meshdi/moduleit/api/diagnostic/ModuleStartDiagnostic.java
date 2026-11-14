@@ -17,7 +17,8 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
         ModuleStartDiagnostic.MeshRegistrationFailed,
         ModuleStartDiagnostic.Started,
         ModuleStartDiagnostic.StartedN,
-        ModuleStartDiagnostic.NothingStarted
+        ModuleStartDiagnostic.NothingStarted,
+        ModuleStartDiagnostic.RollbackFailed
 {
 
     record IncorrectState(
@@ -242,6 +243,18 @@ public sealed interface ModuleStartDiagnostic extends Diagnostic permits
             return "No modules started.";
         }
 
+    }
+
+    /// Start failed and cleaning up after it (mesh unregistration or context disposal) failed as well.
+    record RollbackFailed(@NonNull String id, @NonNull Throwable cause) implements ModuleStartDiagnostic {
+        @Override
+        public DiagnosticSeverity severity() { return DiagnosticSeverity.ERROR; }
+        @Override
+        public String type() { return "module_start_rollback_failed"; }
+        @Override
+        public String message() { return "Failed to roll back a failed start of module: " + id + ". Error: " + cause; }
+        @Override
+        public Map<String, Object> details() { return Map.of("module_id", id, "cause", String.valueOf(cause.getMessage())); }
     }
 
 }

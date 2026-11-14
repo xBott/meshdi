@@ -17,6 +17,11 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.*;
 import me.bottdev.meshdi.moduleit.api.exceptions.*;
 import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleDescriptorException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -30,6 +35,14 @@ import org.semver4j.range.RangeList;
 
 import java.net.URLClassLoader;
 
+/// Default [ModuleManager].
+///
+/// ## Thread safety
+/// Every operation that changes module state (resolve, the completion of prepare, load, start, stop,
+/// unload, restart) runs under one lifecycle lock, so the manager can be driven from any thread and
+/// from the library loader's completion thread. Queries return snapshots. Module code (bean constructors,
+/// lifecycle callbacks) runs while the lock is held; it may call back into the manager from the same
+/// thread, but must not wait for another thread that does.
 public class SimpleModuleManager implements ModuleManager {
 
     private final StatefulVersionedDependencyResolver<String, ModuleCandidate> dependencyResolver;
@@ -47,8 +60,23 @@ public class SimpleModuleManager implements ModuleManager {
         }
     }
 
+    /// How long an unload waits for the class loader to be collected before reporting a leak, unless configured.
+    public static final Duration DEFAULT_LEAK_CHECK_TIMEOUT = Duration.ofSeconds(10);
+
     private final LinkedHashMap<String, InternalModuleHandle> handles = new LinkedHashMap<>();
-    private final Set<Path> sharedLibraries = new HashSet<>();
+    private final Set<Path> sharedLibraries = ConcurrentHashMap.newKeySet();
+    /// Guards `handles` and serialises lifecycle transitions.
+    private final ReentrantLock lifecycleLock = new ReentrantLock();
+    private final Duration leakCheckTimeout;
+
+    private <T> T locked(Supplier<T> action) {
+        lifecycleLock.lock();
+        try {
+            return action.get();
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
     private final SharedLibraryLoader sharedLibraryLoader = new SharedLibraryLoader(new URL[0], ClassLoader.getPlatformClassLoader());
 
     @Builder
@@ -58,8 +86,10 @@ public class SimpleModuleManager implements ModuleManager {
             @NonNull ModuleLoadEnvironment environment,
             @NonNull ModuleLibraryLoader libraryLoader,
             @NonNull ContextMesh contextMesh,
-            @NonNull ModuleClassLoaderLeakDetector leakDetector
+            @NonNull ModuleClassLoaderLeakDetector leakDetector,
+            Duration leakCheckTimeout
     ) {
+        this.leakCheckTimeout = leakCheckTimeout != null ? leakCheckTimeout : DEFAULT_LEAK_CHECK_TIMEOUT;
         this.environment = environment;
         this.dependencyResolver = dependencyResolver;
         this.libraryLoader = libraryLoader;
@@ -69,7 +99,13 @@ public class SimpleModuleManager implements ModuleManager {
 
     ContextMesh contextMesh() { return contextMesh; }
     StatefulVersionedDependencyResolver<String, ModuleCandidate> dependencyResolver() { return dependencyResolver; }
-    void removeHandle(String id) { handles.remove(id); }
+    void removeHandle(String id) {
+        locked(() -> handles.remove(id));
+    }
+
+    Duration leakCheckTimeout() {
+        return leakCheckTimeout;
+    }
 
     public void addSharedLibraries(Collection<Path> paths) {
         for (Path path : paths) {
@@ -93,19 +129,17 @@ public class SimpleModuleManager implements ModuleManager {
 
     @Override
     public List<ModuleHandle> getHandles() {
-        return handles.values().stream()
-                .map(handle -> (ModuleHandle)handle)
-                .toList();
+        return locked(() -> List.copyOf(handles.values()));
     }
 
     @Override
     public boolean exists(String id) {
-        return handles.containsKey(id);
+        return locked(() -> handles.containsKey(id));
     }
 
     @Override
     public ModuleHandle getHandle(String id) {
-        return handles.get(id);
+        return locked(() -> handles.get(id));
     }
 
     @Override
@@ -152,11 +186,20 @@ public class SimpleModuleManager implements ModuleManager {
             DiagnosticSink<ModuleResolutionDiagnostic> sink
     ) {
 
-        Map<String, ModuleCandidate> uniqueCandidates = new HashMap<>();
+        Map<String, ModuleCandidate> uniqueCandidates = new LinkedHashMap<>();
 
         for (ModuleCandidate candidate : candidates) {
 
-            ModuleDescriptor descriptor = candidate.descriptor();
+            ModuleDescriptor descriptor;
+            try {
+                descriptor = candidate.descriptor();
+            } catch (ModuleDescriptorException ex) {
+                // One unreadable jar must not hide every other module.
+                sink.accept(new ModuleResolutionDiagnostic.InvalidDescriptor(candidate.sourceKey(), ex));
+                rejected.add(candidate);
+                continue;
+            }
+
             String moduleId = descriptor.id();
             RangeList requiredApiVersion = descriptor.apiVersion();
 
@@ -185,7 +228,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         }
 
-        return new HashSet<>(uniqueCandidates.values());
+        return new LinkedHashSet<>(uniqueCandidates.values());
     }
 
     private Optional<ResolutionResult<String, ModuleCandidate>> resolveDependencies(
@@ -214,9 +257,14 @@ public class SimpleModuleManager implements ModuleManager {
     @Override
     public ModuleBatchResult<ModuleCandidate> resolve(ModuleRepository repository) throws CandidateListException {
 
+        List<ModuleCandidate> candidates = repository.candidates();
+        return locked(() -> resolveCandidates(candidates));
+    }
+
+    private ModuleBatchResult<ModuleCandidate> resolveCandidates(List<ModuleCandidate> candidates) {
+
         DiagnosticSink<ModuleResolutionDiagnostic> sink = environment.createDiagnosticSink();
 
-        List<ModuleCandidate> candidates = repository.candidates();
         if (candidates.isEmpty()) {
             sink.accept(new ModuleResolutionDiagnostic.NothingResolved());
             return new ModuleBatchResult.Unchanged<>();
@@ -281,7 +329,7 @@ public class SimpleModuleManager implements ModuleManager {
 
         DiagnosticSink<LibraryLoadDiagnostic> sink = environment.createDiagnosticSink();
 
-        return libraryLoader.loadAll(resolved, sink).thenApply(result -> {
+        return libraryLoader.loadAll(resolved, sink).thenApply(result -> locked(() -> {
 
             addSharedLibraries(result.sharedLibraries());
 
@@ -293,6 +341,11 @@ public class SimpleModuleManager implements ModuleManager {
                     failed.add(handle);
                     continue;
                 }
+                // The module may have been unloaded or prepared by someone else while libraries were loading.
+                if (handle.state() != ModuleState.RESOLVED) {
+                    failed.add(handle);
+                    continue;
+                }
                 InternalModuleHandle internalHandle = (InternalModuleHandle) handle;
                 List<Path> libraries = result.isolatedLibraries().getOrDefault(handle, List.of());
                 internalHandle.completePreparation(libraries);
@@ -301,7 +354,7 @@ public class SimpleModuleManager implements ModuleManager {
 
             return ModuleBatchResult.of(prepared, failed);
 
-        });
+        }));
 
     }
 
@@ -346,11 +399,14 @@ public class SimpleModuleManager implements ModuleManager {
             allUrls.add(libPath.toUri().toURL());
         }
 
-        List<ClassProvider> providers = new ArrayList<>(environment.createBaseProviders(moduleId, sharedLibraryLoader));
 
         List<String> dependencyIds = descriptor.getVersionedDependencies().stream()
                 .map(VersionedDependencyRequest::key)
                 .toList();
+
+        List<ClassProvider> providers = new ArrayList<>(
+                environment.createBaseProviders(moduleId, dependencyIds, sharedLibraryLoader)
+        );
 
         return new ModuleClassLoader(
                 moduleId,
@@ -362,6 +418,10 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private ModuleBatchResult<ModuleHandle> loadBatch(List<ModuleHandle> toLoad) {
+        return locked(() -> doLoadBatch(toLoad));
+    }
+
+    private ModuleBatchResult<ModuleHandle> doLoadBatch(List<ModuleHandle> toLoad) {
 
         if (toLoad.isEmpty()) return new ModuleBatchResult.Unchanged<>();
 
@@ -405,6 +465,10 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private ModuleBatchResult<ModuleHandle> startBatch(List<ModuleHandle> toStart) {
+        return locked(() -> doStartBatch(toStart));
+    }
+
+    private ModuleBatchResult<ModuleHandle> doStartBatch(List<ModuleHandle> toStart) {
 
         if (toStart.isEmpty()) return new ModuleBatchResult.Unchanged<>();
 
@@ -456,6 +520,10 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private ModuleBatchResult<ModuleHandle> stopBatch(List<ModuleHandle> toStop) {
+        return locked(() -> doStopBatch(toStop));
+    }
+
+    private ModuleBatchResult<ModuleHandle> doStopBatch(List<ModuleHandle> toStop) {
 
         if (toStop.isEmpty()) return new ModuleBatchResult.Unchanged<>();
 
@@ -508,6 +576,11 @@ public class SimpleModuleManager implements ModuleManager {
 
 
     private CompletableFuture<ModuleBatchResult<ModuleHandle>> unloadBatch(List<ModuleHandle> toUnload) {
+        // Only the synchronous part runs under the lock; the returned future waits for the leak check.
+        return locked(() -> doUnloadBatch(toUnload));
+    }
+
+    private CompletableFuture<ModuleBatchResult<ModuleHandle>> doUnloadBatch(List<ModuleHandle> toUnload) {
 
         if (toUnload.isEmpty()) return CompletableFuture.completedFuture(new ModuleBatchResult.Unchanged<>());
 
@@ -593,11 +666,33 @@ public class SimpleModuleManager implements ModuleManager {
         return unloadBatch(getHandles().reversed());
     }
 
-    /// Result reflects the start phase: non-started modules are started as well.
+    /// Stops the modules and starts them again in the opposite order.
+    ///
+    /// Modules that were not running are started as well. A module that failed to stop is not started:
+    /// its context may still be alive, so it is reported as failed and left in `STOP_FAILED` for a retry.
     private ModuleBatchResult<ModuleHandle> restartBatch(List<ModuleHandle> toRestart) {
         if (toRestart.isEmpty()) return new ModuleBatchResult.Unchanged<>();
-        stopBatch(toRestart);
-        return startBatch(toRestart.reversed());
+
+        return locked(() -> {
+            stopBatch(toRestart);
+
+            List<ModuleHandle> stopFailed = new ArrayList<>();
+            List<ModuleHandle> toStart = new ArrayList<>();
+            for (ModuleHandle handle : toRestart.reversed()) {
+                if (handle.state() == ModuleState.STOP_FAILED) {
+                    stopFailed.add(handle);
+                } else {
+                    toStart.add(handle);
+                }
+            }
+
+            ModuleBatchResult<ModuleHandle> started = startBatch(toStart);
+            if (stopFailed.isEmpty()) return started;
+
+            List<ModuleHandle> failed = new ArrayList<>(stopFailed);
+            failed.addAll(started.failed());
+            return ModuleBatchResult.of(started.processed(), failed);
+        });
     }
 
     @Override

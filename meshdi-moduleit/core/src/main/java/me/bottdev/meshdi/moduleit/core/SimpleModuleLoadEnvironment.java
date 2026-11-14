@@ -16,6 +16,7 @@ import org.semver4j.Semver;
 
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -34,11 +35,15 @@ public record SimpleModuleLoadEnvironment(
     }
 
     @Override
-    public List<ClassProvider> createBaseProviders(String moduleId, URLClassLoader sharedLibraryLoader) {
+    public List<ClassProvider> createBaseProviders(
+            String moduleId,
+            Collection<String> dependencyIds,
+            URLClassLoader sharedLibraryLoader
+    ) {
         List<ClassProvider> providers = new ArrayList<>();
         providers.add(new PlatformClassProvider());
         providers.add(new ApiClassProvider(apiLoader, apiPackages));
-        providers.add(new ExportRegistryClassProvider(moduleId, exportRegistry));
+        providers.add(new ExportRegistryClassProvider(moduleId, dependencyIds, exportRegistry));
         providers.add(new SharedLibraryClassProvider(sharedLibraryLoader));
         return providers;
     }

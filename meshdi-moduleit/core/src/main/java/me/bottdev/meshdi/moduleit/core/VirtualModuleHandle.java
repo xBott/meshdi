@@ -1,10 +1,11 @@
 package me.bottdev.meshdi.moduleit.core;
 
+import java.util.EnumSet;
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException;
 import lombok.Builder;
 import lombok.NonNull;
 import me.bottdev.kern.commons.diagnostic.DiagnosticSink;
 import me.bottdev.kern.dependency.exceptions.ResolverForgetException;
-import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.meshdi.api.Context;
 import me.bottdev.meshdi.api.MeshRegistration;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
@@ -22,8 +23,6 @@ import me.bottdev.meshdi.moduleit.api.diagnostic.ModuleUnloadDiagnostic;
 import org.semver4j.Semver;
 
 import java.nio.file.Path;
-import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -38,7 +37,17 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     private final List<Path> libraries;
     private final VirtualModuleCandidate candidate;
 
-    private ModuleState state = ModuleState.RESOLVED;
+    private static final Set<ModuleState> STARTABLE = EnumSet.of(
+            ModuleState.LOADED, ModuleState.STOPPED, ModuleState.START_FAILED, ModuleState.UNLOAD_FAILED
+    );
+    private static final Set<ModuleState> STOPPABLE = EnumSet.of(
+            ModuleState.STARTED, ModuleState.STOP_FAILED
+    );
+    private static final Set<ModuleState> UNLOADABLE = EnumSet.of(
+            ModuleState.STOPPED, ModuleState.LOADED, ModuleState.START_FAILED, ModuleState.UNLOAD_FAILED
+    );
+
+    private volatile ModuleState state = ModuleState.RESOLVED;
 
     public VirtualModuleHandle(ModuleDescriptor descriptor, Context context) {
         this(descriptor, context, false, false, false, List.of());
@@ -98,12 +107,12 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public void completePreparation(List<Path> libraries) {
+    public synchronized void completePreparation(List<Path> libraries) {
         this.state = ModuleState.READY;
     }
 
     @Override
-    public boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
+    public synchronized boolean doLoad(SimpleModuleManager manager, DiagnosticSink<ModuleLoadDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
@@ -114,7 +123,13 @@ public class VirtualModuleHandle implements InternalModuleHandle {
 
         Set<String> exports = descriptor.exports();
         if (exports != null && !exports.isEmpty()) {
-            manager.environment().exportRegistry().register(moduleId, exports, classLoader());
+            try {
+                manager.environment().exportRegistry().register(moduleId, exports, classLoader());
+
+            } catch (ModuleExportConflictException ex) {
+                sink.accept(new ModuleLoadDiagnostic.ExportConflict(moduleId, ex));
+                return false;
+            }
             sink.accept(new ModuleLoadDiagnostic.ExportsRegistered(moduleId, exports.size()));
         }
 
@@ -124,11 +139,11 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
+    public synchronized boolean doStart(SimpleModuleManager manager, DiagnosticSink<ModuleStartDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
-        if (state != ModuleState.LOADED && state != ModuleState.STOPPED) {
+        if (!STARTABLE.contains(state)) {
             sink.accept(new ModuleStartDiagnostic.IncorrectState(moduleId, state));
             return false;
         }
@@ -137,9 +152,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
         boolean success = false;
 
         try {
-            List<String> sees = descriptor.getVersionedDependencies().stream()
-                    .map(VersionedDependencyRequest::key)
-                    .toList();
+            List<String> sees = ModuleHandleSupport.visibleContextIds(descriptor, manager.contextMesh());
 
             MeshRegistration registration = new MeshRegistration(context, sees);
             manager.contextMesh().register(registration);
@@ -161,49 +174,60 @@ public class VirtualModuleHandle implements InternalModuleHandle {
     }
 
     @Override
-    public boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
+    public synchronized boolean doStop(SimpleModuleManager manager, DiagnosticSink<ModuleStopDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
-        if (state != ModuleState.STARTED) {
+        if (!STOPPABLE.contains(state)) {
             sink.accept(new ModuleStopDiagnostic.IncorrectState(moduleId));
             return false;
         }
 
+        boolean retry = state == ModuleState.STOP_FAILED;
         this.state = ModuleState.STOPPING;
+
         String contextId = context.id();
-        boolean success = false;
 
-        try {
-            manager.contextMesh().planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
-            if (disposeOnStop) {
-                context.dispose();
+        // A retry may find the context already removed from the mesh by the previous attempt.
+        if (!retry || manager.contextMesh().contains(contextId)) {
+            try {
+                manager.contextMesh().planUnregister(contextId, MeshContextSelectionStrategies.CASCADE).execute();
+
+            } catch (MeshUnregisterExecuteException ex) {
+                sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
+                this.state = ModuleState.STOP_FAILED;
+                return false;
+
+            } catch (MeshContextSelectionException ex) {
+                sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
+                this.state = ModuleState.STOP_FAILED;
+                return false;
             }
-
-            this.state = ModuleState.STOPPED;
-            success = true;
-
-        } catch (MeshUnregisterExecuteException ex) {
-            sink.accept(new ModuleStopDiagnostic.MeshUnregisterExecutionFailed(moduleId, ex));
-        } catch (MeshContextSelectionException ex) {
-            sink.accept(new ModuleStopDiagnostic.MeshUnregisterPlanFailed(moduleId, ex));
         }
 
-        if (!success) {
-            this.state = ModuleState.STOP_FAILED;
-            return false;
+        if (disposeOnStop) {
+            try {
+                context.dispose();
+
+            } catch (RuntimeException ex) {
+                sink.accept(new ModuleStopDiagnostic.ContextDisposeFailed(moduleId, ex));
+                this.state = ModuleState.STOP_FAILED;
+                return false;
+            }
         }
+
+        this.state = ModuleState.STOPPED;
 
         sink.accept(new ModuleStopDiagnostic.Stopped(moduleId, version));
         return true;
     }
 
     @Override
-    public CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
+    public synchronized CompletableFuture<LeakDetectorResult> doUnload(SimpleModuleManager manager, DiagnosticSink<ModuleUnloadDiagnostic> sink) {
         String moduleId = descriptor.id();
         Semver version = descriptor.semver();
 
-        if (state != ModuleState.STOPPED && state != ModuleState.LOADED) {
+        if (!UNLOADABLE.contains(state)) {
             sink.accept(new ModuleUnloadDiagnostic.IncorrectState(moduleId, state));
             return CompletableFuture.completedFuture(null);
         }
@@ -230,7 +254,7 @@ public class VirtualModuleHandle implements InternalModuleHandle {
 
         if (trackClassLoaderOnUnload) {
             manager.leakDetector().track(moduleId, classLoader());
-            return manager.leakDetector().awaitUnloadAsync(moduleId, Duration.of(10, ChronoUnit.SECONDS));
+            return manager.leakDetector().awaitUnloadAsync(moduleId, manager.leakCheckTimeout());
         } else {
             return CompletableFuture.completedFuture(new LeakDetectorResult.Disabled());
         }

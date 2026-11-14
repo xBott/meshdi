@@ -16,7 +16,8 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
         ModuleStopDiagnostic.ForgetFailed,
         ModuleStopDiagnostic.Stopped,
         ModuleStopDiagnostic.StoppedN,
-        ModuleStopDiagnostic.NothingStopped
+        ModuleStopDiagnostic.NothingStopped,
+        ModuleStopDiagnostic.ContextDisposeFailed
 {
 
     record IncorrectState(@NonNull String id) implements ModuleStopDiagnostic {
@@ -93,4 +94,17 @@ public sealed interface ModuleStopDiagnostic extends Diagnostic permits
         @Override
         public String message() { return "No modules stopped."; }
     }
+
+    /// The context of the module was removed from the mesh, but disposing it threw. Stopping can be retried.
+    record ContextDisposeFailed(@NonNull String id, @NonNull Throwable cause) implements ModuleStopDiagnostic {
+        @Override
+        public DiagnosticSeverity severity() { return DiagnosticSeverity.ERROR; }
+        @Override
+        public String type() { return "module_stop_context_dispose_failed"; }
+        @Override
+        public String message() { return "Failed to dispose context of module: " + id + ". Error: " + cause; }
+        @Override
+        public Map<String, Object> details() { return Map.of("module_id", id, "cause", String.valueOf(cause.getMessage())); }
+    }
+
 }

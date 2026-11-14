@@ -19,7 +19,8 @@ public sealed interface ModuleResolutionDiagnostic extends ModuleDiagnostic perm
         ModuleResolutionDiagnostic.BadDependencyResolution,
         ModuleResolutionDiagnostic.Resolved,
         ModuleResolutionDiagnostic.ResolvedN,
-        ModuleResolutionDiagnostic.NothingResolved
+        ModuleResolutionDiagnostic.NothingResolved,
+        ModuleResolutionDiagnostic.InvalidDescriptor
 {
 
     record AlreadyLoaded(@NonNull String id) implements ModuleResolutionDiagnostic {
@@ -211,6 +212,18 @@ public sealed interface ModuleResolutionDiagnostic extends ModuleDiagnostic perm
             return "No modules resolved.";
         }
 
+    }
+
+    /// A candidate was rejected because its descriptor could not be read. Other candidates are not affected.
+    record InvalidDescriptor(@NonNull String sourceKey, @NonNull Throwable cause) implements ModuleResolutionDiagnostic {
+        @Override
+        public DiagnosticSeverity severity() { return DiagnosticSeverity.ERROR; }
+        @Override
+        public String type() { return "module_resolution_invalid_descriptor"; }
+        @Override
+        public String message() { return "Candidate " + sourceKey + " has an invalid module descriptor. Error: " + cause.getMessage(); }
+        @Override
+        public Map<String, Object> details() { return Map.of("source_key", sourceKey, "cause", String.valueOf(cause.getMessage())); }
     }
 
 }

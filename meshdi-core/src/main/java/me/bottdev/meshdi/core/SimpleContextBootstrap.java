@@ -3,6 +3,7 @@ package me.bottdev.meshdi.core;
 import me.bottdev.meshdi.api.BindingBuilder;
 import me.bottdev.meshdi.api.ComponentDefinition;
 import me.bottdev.meshdi.api.exceptions.ContextBootstrapException;
+import me.bottdev.meshdi.api.exceptions.DuplicateBindingException;
 import me.bottdev.meshdi.core.builders.SimpleContextBuilder;
 
 import java.util.ServiceConfigurationError;
@@ -24,6 +25,11 @@ public class SimpleContextBootstrap {
 
         } catch (ServiceConfigurationError ex) {
             throw new ContextBootstrapException("Failed to load bean definitions.", ex);
+
+        } catch (DuplicateBindingException ex) {
+            throw new ContextBootstrapException(
+                    "Two component definitions visible to the class loader bind the same key: " + ex.getKey() + ".", ex
+            );
 
         }
 

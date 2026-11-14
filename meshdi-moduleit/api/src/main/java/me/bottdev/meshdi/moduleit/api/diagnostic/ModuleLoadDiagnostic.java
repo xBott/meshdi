@@ -15,7 +15,8 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
         ModuleLoadDiagnostic.Loaded,
         ModuleLoadDiagnostic.LoadedN,
         ModuleLoadDiagnostic.NothingLoaded,
-        ModuleLoadDiagnostic.MalformedLibraryUrl
+        ModuleLoadDiagnostic.MalformedLibraryUrl,
+        ModuleLoadDiagnostic.ExportConflict
 {
 
     record IncorrectState(
@@ -165,6 +166,18 @@ public sealed interface ModuleLoadDiagnostic extends ModuleDiagnostic permits
         public String message() {
             return "No modules loaded.";
         }
+    }
+
+    /// The module was not loaded because one of its exported packages is already exported by another module.
+    record ExportConflict(@NonNull String id, @NonNull Throwable cause) implements ModuleLoadDiagnostic {
+        @Override
+        public DiagnosticSeverity severity() { return DiagnosticSeverity.ERROR; }
+        @Override
+        public String type() { return "module_load_export_conflict"; }
+        @Override
+        public String message() { return "Failed to register exports of module: " + id + ". Error: " + cause.getMessage(); }
+        @Override
+        public Map<String, Object> details() { return Map.of("module_id", id, "cause", String.valueOf(cause.getMessage())); }
     }
 
 }
