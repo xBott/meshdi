@@ -1,6 +1,5 @@
 package me.bottdev.meshdi.core;
 
-import lombok.RequiredArgsConstructor;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.Binding;
 import me.bottdev.meshdi.api.BindingContainer;
@@ -8,10 +7,16 @@ import me.bottdev.meshdi.api.BindingContainer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@RequiredArgsConstructor
 public class SimpleBindingContainer implements BindingContainer {
 
-    private final Map<TypedKey<?>, Binding<?>> bindings;
+    /// Insertion-ordered and never mutated: disposing swaps the reference, so concurrent readers
+    /// (mesh lookups from other threads) never observe a map that is being cleared.
+    private volatile Map<TypedKey<?>, Binding<?>> bindings;
+
+    /// @param bindings the bindings of the context. Iteration order is kept and defines eager initialisation order.
+    public SimpleBindingContainer(Map<TypedKey<?>, Binding<?>> bindings) {
+        this.bindings = Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
+    }
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
     @Override
@@ -45,7 +50,7 @@ public class SimpleBindingContainer implements BindingContainer {
     @Override
     public void dispose() {
         if (disposed.compareAndSet(false, true)) {
-            bindings.clear();
+            bindings = Map.of();
         }
     }
 
@@ -61,12 +66,12 @@ public class SimpleBindingContainer implements BindingContainer {
 
     @Override
     public Set<TypedKey<?>> keys() {
-        return Collections.unmodifiableSet(bindings.keySet());
+        return bindings.keySet();
     }
 
     @Override
     public Collection<Binding<?>> values() {
-        return Collections.unmodifiableCollection(bindings.values());
+        return bindings.values();
     }
 
     @Override
@@ -81,6 +86,6 @@ public class SimpleBindingContainer implements BindingContainer {
 
     @Override
     public Map<TypedKey<?>, Binding<?>> toMap() {
-        return Map.copyOf(bindings);
+        return bindings;
     }
 }

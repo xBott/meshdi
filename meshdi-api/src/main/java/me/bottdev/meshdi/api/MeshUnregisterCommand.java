@@ -19,14 +19,19 @@ public record MeshUnregisterCommand(
 
     /// Executes the unregistration process for all selected contexts in the planned order.
     ///
-    /// @throws MeshUnregisterExecuteException if any context fails to unregister
+    /// The command stops at the first failure: contexts are ordered dependents-first, so continuing
+    /// could remove a context that the failed one still sees.
+    ///
+    /// @throws MeshUnregisterExecuteException if a context fails to unregister, with the failure as its cause
     public void execute() throws MeshUnregisterExecuteException {
         for (String contextId : ordered) {
             try {
                 unregisterHandler.accept(contextId);
 
             } catch (Exception ex) {
-                throw new MeshUnregisterExecuteException(contextId);
+                throw new MeshUnregisterExecuteException(
+                        "Failed to unregister context \"" + contextId + "\" from a mesh.", ex
+                );
 
             }
         }

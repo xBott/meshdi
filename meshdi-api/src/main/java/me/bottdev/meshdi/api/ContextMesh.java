@@ -86,6 +86,8 @@ public interface ContextMesh extends Disposable {
     /// @param key the typed key to look for
     /// @param <T> the type of the bean
     /// @return an [Optional] containing the lookup result if successful, empty otherwise
+    /// @throws me.bottdev.meshdi.api.exceptions.mesh.MeshAmbiguousLookupException if more than one
+    /// visible context binds the key
     <T> Optional<ContextMeshLookup<T>> lookup(String fromId, TypedKey<T> key);
 
 }
