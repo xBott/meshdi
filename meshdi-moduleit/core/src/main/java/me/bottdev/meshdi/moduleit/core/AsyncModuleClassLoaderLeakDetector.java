@@ -3,6 +3,7 @@ package me.bottdev.meshdi.moduleit.core;
 import me.bottdev.meshdi.moduleit.api.LeakDetectorResult;
 import me.bottdev.meshdi.moduleit.api.ModuleClassLoaderLeakDetector;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.ref.PhantomReference;
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
@@ -28,13 +29,43 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
     private final ScheduledExecutorService scheduler;
     private volatile BiConsumer<String, Boolean> onResult = (_, _) -> {};
 
+    /// Delays of the GC nudges after the first unload of a batch.
+    private static final List<Duration> DEFAULT_GC_NUDGES =
+            List.of(Duration.ZERO, Duration.ofMillis(300), Duration.ofMillis(1000));
+
+    private final List<Duration> gcNudges;
+    /// True while a round of nudges is scheduled. Unloads arriving in that window share the round,
+    /// so unloading N modules at once costs one round of collections instead of N.
+    private final AtomicBoolean nudgeRoundActive = new AtomicBoolean(false);
+
     public AsyncModuleClassLoaderLeakDetector() {
+        this(DEFAULT_GC_NUDGES);
+    }
+
+    /// @param gcNudges delays at which `System.gc()` is requested after an unload. Pass an empty list to never
+    /// request a collection (for JVMs that run with `-XX:+DisableExplicitGC` the nudges are no-ops anyway);
+    /// class loaders are then reported as freed whenever the JVM collects them on its own.
+    public AsyncModuleClassLoaderLeakDetector(List<Duration> gcNudges) {
+        this.gcNudges = List.copyOf(gcNudges);
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "meshdi-classloader-leak-detector");
             thread.setDaemon(true);
             return thread;
         });
         scheduler.scheduleWithFixedDelay(this::drainQueue, 500, 500, TimeUnit.MILLISECONDS);
+    }
+
+    /// Schedules one round of GC nudges unless a round is already pending.
+    private void scheduleNudgeRound() {
+        if (gcNudges.isEmpty()) return;
+        if (!nudgeRoundActive.compareAndSet(false, true)) return;
+
+        long last = 0;
+        for (Duration delay : gcNudges) {
+            nudgeAndDrain(delay.toMillis());
+            last = Math.max(last, delay.toMillis());
+        }
+        scheduler.schedule(() -> nudgeRoundActive.set(false), last, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -73,13 +104,14 @@ public class AsyncModuleClassLoaderLeakDetector implements ModuleClassLoaderLeak
         // A single explicit GC is normally enough for class unloading on HotSpot;
         // we schedule a couple of *spaced out* follow-up nudges instead of a tight loop,
         // each with its own drainQueue() so newly-enqueued references are picked up promptly.
-        nudgeAndDrain(0);
-        nudgeAndDrain(300);
-        nudgeAndDrain(1000);
+        // The round is shared by all unloads that arrive while it is pending.
+        scheduleNudgeRound();
 
         ScheduledFuture<?> timeoutTask = scheduler.schedule(() -> {
             if (!future.isDone()) {
                 removeWaiter(moduleId, future);
+                // The verdict is advisory. Stop tracking, so a leaked loader does not stay in the map forever.
+                tracked.values().removeIf(moduleId::equals);
                 future.complete(new LeakDetectorResult.Leaked(new IllegalStateException(
                         "ClassLoader for module '" + moduleId + "' was not garbage collected within "
                                 + timeout + ". Something still holds a strong reference to it or to one "
