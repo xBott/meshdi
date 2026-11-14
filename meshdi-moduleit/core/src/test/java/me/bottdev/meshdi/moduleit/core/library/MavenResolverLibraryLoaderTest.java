@@ -64,6 +64,14 @@ class MavenResolverLibraryLoaderTest {
                 .build();
     }
 
+    private MavenResolverLibraryLoader newLoader(java.util.function.Predicate<RepositoryDeclaration> policy) {
+        return MavenResolverLibraryLoader.builder()
+                .localRepository(localRepository)
+                .repository(new RepositoryDeclaration("test", repository.url()))
+                .moduleRepositoryPolicy(policy)
+                .build();
+    }
+
     private static LibraryRequirement shared(String gav) {
         return new LibraryRequirement(gav, LibraryScope.SHARED);
     }
@@ -221,7 +229,29 @@ class MavenResolverLibraryLoaderTest {
         }
 
         @Test
-        void shouldUseRepositoryDeclaredByModule() {
+        void shouldUseRepositoryDeclaredByModule_forItsIsolatedLibraries() {
+            // Given
+            FakeMavenRepository moduleRepository = new FakeMavenRepository(repositoryDir.resolve("module-repo"));
+            moduleRepository.jar("org.example:only-there:1.0");
+            ModuleHandle handle = module(
+                    "m",
+                    Set.of(new RepositoryDeclaration("module-repo", moduleRepository.url())),
+                    isolated("org.example:only-there:1.0")
+            );
+
+            // When
+            ModuleLibrariesResult result;
+            try (MavenResolverLibraryLoader permissive = newLoader(_ -> true)) {
+                result = permissive.loadAll(List.of(handle), sink).orTimeout(30, TimeUnit.SECONDS).join();
+            }
+
+            // Then
+            assertThat(result.failed()).isFalse();
+            assertThat(fileNames(result.isolatedLibraries().get(handle))).containsExactly("only-there-1.0.jar");
+        }
+
+        @Test
+        void shouldNeverUseModuleRepository_forSharedLibraries() {
             // Given
             FakeMavenRepository moduleRepository = new FakeMavenRepository(repositoryDir.resolve("module-repo"));
             moduleRepository.jar("org.example:only-there:1.0");
@@ -232,11 +262,59 @@ class MavenResolverLibraryLoaderTest {
             );
 
             // When
+            ModuleLibrariesResult result;
+            try (MavenResolverLibraryLoader permissive = newLoader(_ -> true)) {
+                result = permissive.loadAll(List.of(handle), sink).orTimeout(30, TimeUnit.SECONDS).join();
+            }
+
+            // Then
+            assertThat(result.failedModules()).containsExactly(handle);
+            assertThat(result.sharedLibraries()).isEmpty();
+            assertThat(diagnostics).anyMatch(diagnostic ->
+                    diagnostic instanceof LibraryLoadDiagnostic.RepositoryRejected rejected
+                            && rejected.repositoryId().equals("module-repo"));
+        }
+
+        @Test
+        void shouldRejectInsecureModuleRepository_byDefault() {
+            // Given: the default policy is https only, and the fake repository is a file:// url.
+            FakeMavenRepository moduleRepository = new FakeMavenRepository(repositoryDir.resolve("module-repo"));
+            moduleRepository.jar("org.example:only-there:1.0");
+            ModuleHandle handle = module(
+                    "m",
+                    Set.of(new RepositoryDeclaration("module-repo", moduleRepository.url())),
+                    isolated("org.example:only-there:1.0")
+            );
+
+            // When
             ModuleLibrariesResult result = load(handle);
 
             // Then
-            assertThat(result.failed()).isFalse();
-            assertThat(fileNames(result.sharedLibraries())).containsExactly("only-there-1.0.jar");
+            assertThat(result.failedModules()).containsExactly(handle);
+            assertThat(diagnostics).anyMatch(diagnostic ->
+                    diagnostic instanceof LibraryLoadDiagnostic.RepositoryRejected rejected
+                            && rejected.moduleId().equals("m"));
+        }
+
+        @Test
+        void shouldNotUseRepositoryOfAnotherModule() {
+            // Given: "attacker" declares a repository that serves the library "victim" asks for.
+            FakeMavenRepository attackerRepository = new FakeMavenRepository(repositoryDir.resolve("attacker-repo"));
+            attackerRepository.jar("org.example:private-lib:1.0");
+            ModuleHandle attacker = module(
+                    "attacker",
+                    Set.of(new RepositoryDeclaration("attacker-repo", attackerRepository.url()))
+            );
+            ModuleHandle victim = module("victim", isolated("org.example:private-lib:1.0"));
+
+            // When
+            ModuleLibrariesResult result;
+            try (MavenResolverLibraryLoader permissive = newLoader(_ -> true)) {
+                result = permissive.loadAll(List.of(attacker, victim), sink).orTimeout(30, TimeUnit.SECONDS).join();
+            }
+
+            // Then
+            assertThat(result.failedModules()).containsExactly(victim);
         }
 
         @Test

@@ -14,7 +14,8 @@ public sealed interface LibraryLoadDiagnostic extends Diagnostic permits
         LibraryLoadDiagnostic.DownloadFailed,
         LibraryLoadDiagnostic.ResolutionFailed,
         LibraryLoadDiagnostic.Resolved,
-        LibraryLoadDiagnostic.DescriptorUnavailable
+        LibraryLoadDiagnostic.DescriptorUnavailable,
+        LibraryLoadDiagnostic.RepositoryRejected
 {
 
     record Requested(MavenCoordinate coordinate) implements LibraryLoadDiagnostic {
@@ -188,6 +189,42 @@ public sealed interface LibraryLoadDiagnostic extends Diagnostic permits
         public Map<String, Object> details() {
             return Map.of(
                     "coordinate", coordinate,
+                    "reason", reason
+            );
+        }
+    }
+
+    /// A repository declared by a module is not used for a resolution.
+    ///
+    /// @param moduleId the module that declared the repository
+    /// @param repositoryId the id of the repository
+    /// @param url the url of the repository
+    /// @param reason why it is not used
+    record RepositoryRejected(
+            String moduleId,
+            String repositoryId,
+            String url,
+            String reason
+    ) implements LibraryLoadDiagnostic {
+        @Override
+        public DiagnosticSeverity severity() { return DiagnosticSeverity.WARN; }
+
+        @Override
+        public String type() {
+            return "library_load_repository_rejected";
+        }
+
+        @Override
+        public String message() {
+            return "Repository \"" + repositoryId + "\" (" + url + ") of module " + moduleId + " is not used: " + reason;
+        }
+
+        @Override
+        public Map<String, Object> details() {
+            return Map.of(
+                    "module_id", moduleId,
+                    "repository_id", repositoryId,
+                    "repository_url", url,
                     "reason", reason
             );
         }

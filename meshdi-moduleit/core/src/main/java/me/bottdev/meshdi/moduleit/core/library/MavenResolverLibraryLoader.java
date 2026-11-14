@@ -37,6 +37,8 @@ import org.eclipse.aether.util.version.GenericVersionScheme;
 import org.eclipse.aether.version.InvalidVersionSpecificationException;
 import org.eclipse.aether.version.VersionScheme;
 
+import java.util.Properties;
+import java.util.function.Predicate;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -93,6 +95,10 @@ public class MavenResolverLibraryLoader implements ModuleLibraryLoader, AutoClos
 
     private record SharedOutcome(List<Path> paths, Map<String, Artifact> shared) {}
 
+    /// Default policy for repositories declared by modules: well-formed `https` urls only.
+    public static final Predicate<RepositoryDeclaration> HTTPS_ONLY = RepositoryDeclaration::isSecure;
+
+    private final Predicate<RepositoryDeclaration> moduleRepositoryPolicy;
     private final RepositorySystem system;
     private final RepositorySystemSession.CloseableSession session;
     private final List<RemoteRepository> repositories;
@@ -104,19 +110,24 @@ public class MavenResolverLibraryLoader implements ModuleLibraryLoader, AutoClos
 
     /// @param localRepository directory of the local repository (Maven `~/.m2/repository` layout)
     ///                        where downloaded artifacts are cached.
-    /// @param repositories    remote repositories available to every module, in lookup order.
-    ///                        Repositories declared by modules are added after them.
+    /// @param repositories    remote repositories available to every module, in lookup order. They are trusted
+    ///                        as given. Repositories declared by a module are added after them, only for
+    ///                        that module's isolated libraries.
     /// @param offline         if true, only the local repository is used.
+    /// @param moduleRepositoryPolicy decides which repositories declared by modules may be used.
+    ///                        Defaults to [#HTTPS_ONLY]. A host that wants an allowlist passes its own predicate.
     @Builder
     public MavenResolverLibraryLoader(
             @NonNull Path localRepository,
             @Singular List<RepositoryDeclaration> repositories,
-            boolean offline
+            boolean offline,
+            Predicate<RepositoryDeclaration> moduleRepositoryPolicy
     ) {
+        this.moduleRepositoryPolicy = moduleRepositoryPolicy != null ? moduleRepositoryPolicy : HTTPS_ONLY;
         this.system = new RepositorySystemSupplier().get();
         this.session = new SessionBuilderSupplier(system).get()
                 .withLocalRepositoryBaseDirectories(localRepository)
-                .setSystemProperties(System.getProperties())
+                .setSystemProperties(resolverSystemProperties())
                 .setChecksumPolicy(RepositoryPolicy.CHECKSUM_POLICY_FAIL)
                 .setOffline(offline)
                 .setRepositoryListener(new SinkRoutingListener())
@@ -171,7 +182,9 @@ public class MavenResolverLibraryLoader implements ModuleLibraryLoader, AutoClos
                     .map(artifact -> new Dependency(withoutPath(artifact), JavaScopes.RUNTIME))
                     .toList();
 
-            Resolution resolution = resolve(SHARED, requirements, alreadyShared, repositoriesOf(handles), sink);
+            // Shared libraries are visible to every module, so only host repositories may serve them.
+            reportRepositoriesIgnoredForShared(handles, sink);
+            Resolution resolution = resolve(SHARED, requirements, alreadyShared, repositories, sink);
 
             List<Artifact> accepted = new ArrayList<>();
             for (Artifact artifact : resolution.artifacts()) {
@@ -203,7 +216,7 @@ public class MavenResolverLibraryLoader implements ModuleLibraryLoader, AutoClos
     ) {
         String moduleId = handle.descriptor().id();
         Map<String, Requirement> requirements = selectRequirements(List.of(handle), LibraryScope.ISOLATED, Map.of(), sink);
-        Resolution resolution = resolve(moduleId, requirements, List.of(), repositoriesOf(List.of(handle)), sink);
+        Resolution resolution = resolve(moduleId, requirements, List.of(), repositoriesOf(handle, sink), sink);
 
         if (!resolution.failedRoots().isEmpty()) {
             failedModules.add(handle);
@@ -371,16 +384,73 @@ public class MavenResolverLibraryLoader implements ModuleLibraryLoader, AutoClos
         }
     }
 
-    /// @return global repositories followed by repositories declared by the modules, without duplicate ids.
-    private List<RemoteRepository> repositoriesOf(List<ModuleHandle> handles) {
+    /// Repositories for the isolated libraries of one module: host repositories first, then the repositories
+    /// this module declared itself. Repositories of other modules are never included, a module repository
+    /// cannot replace a host repository with the same id, and the module repository policy must accept it.
+    private List<RemoteRepository> repositoriesOf(ModuleHandle handle, DiagnosticSink<LibraryLoadDiagnostic> sink) {
         Map<String, RemoteRepository> byId = new LinkedHashMap<>();
         repositories.forEach(repository -> byId.putIfAbsent(repository.getId(), repository));
-        for (ModuleHandle handle : handles) {
-            for (RepositoryDeclaration declaration : handle.descriptor().repositories()) {
-                byId.putIfAbsent(declaration.id(), toRemoteRepository(declaration));
+
+        String moduleId = handle.descriptor().id();
+        boolean hasIsolated = handle.descriptor().libraries().stream()
+                .anyMatch(library -> library.scope() == LibraryScope.ISOLATED);
+
+        for (RepositoryDeclaration declaration : handle.descriptor().repositories()) {
+            if (byId.containsKey(declaration.id())) {
+                if (hasIsolated && !isHostRepository(declaration)) reject(sink, moduleId, declaration,
+                        "a repository with this id is already defined and cannot be replaced by a module");
+                continue;
             }
+            if (!moduleRepositoryPolicy.test(declaration)) {
+                if (hasIsolated) reject(sink, moduleId, declaration,
+                        "it is not allowed by the module repository policy (https only by default)");
+                continue;
+            }
+            byId.put(declaration.id(), toRemoteRepository(declaration));
         }
         return List.copyOf(byId.values());
+    }
+
+    private boolean isHostRepository(RepositoryDeclaration declaration) {
+        return repositories.stream().anyMatch(repository ->
+                repository.getId().equals(declaration.id()) && repository.getUrl().equals(declaration.url()));
+    }
+
+    private void reportRepositoriesIgnoredForShared(
+            List<ModuleHandle> handles,
+            DiagnosticSink<LibraryLoadDiagnostic> sink
+    ) {
+        for (ModuleHandle handle : handles) {
+            boolean hasShared = handle.descriptor().libraries().stream()
+                    .anyMatch(library -> library.scope() == LibraryScope.SHARED);
+            if (!hasShared) continue;
+            for (RepositoryDeclaration declaration : handle.descriptor().repositories()) {
+                if (isHostRepository(declaration)) continue;
+                reject(sink, handle.descriptor().id(), declaration,
+                        "module repositories never serve shared libraries, declare the library as isolated "
+                                + "or add the repository to the host");
+            }
+        }
+    }
+
+    private static void reject(
+            DiagnosticSink<LibraryLoadDiagnostic> sink,
+            String moduleId,
+            RepositoryDeclaration declaration,
+            String reason
+    ) {
+        sink.accept(new LibraryLoadDiagnostic.RepositoryRejected(moduleId, declaration.id(), declaration.url(), reason));
+    }
+
+    /// System properties visible to Maven Resolver, without `aether.*` keys: those configure the resolver
+    /// itself (transport security, checksum handling) and must not be switchable from the command line.
+    private static Properties resolverSystemProperties() {
+        Properties filtered = new Properties();
+        System.getProperties().forEach((key, value) -> {
+            if (key instanceof String name && name.startsWith("aether.")) return;
+            filtered.put(key, value);
+        });
+        return filtered;
     }
 
     private static RemoteRepository toRemoteRepository(RepositoryDeclaration declaration) {
