@@ -10,9 +10,12 @@ import org.semver4j.range.RangeList;
 import java.util.Set;
 
 /// A contract that contains a meta-information about the module.
-/// Generated automatically thought APT for classes annotated with [me.bottdev.meshdi.moduleit.api.annotations.Module].
+///
+/// For classes annotated with [me.bottdev.meshdi.moduleit.api.annotations.Module] the annotation processor
+/// writes it as data into [#DESCRIPTOR_FILE], and [ModuleDescriptorCodec] reads it back without loading module code.
 public interface ModuleDescriptor extends VersionedDependencyAware<String> {
 
+    /// Path of the descriptor inside a module jar. Its content is described by [ModuleDescriptorCodec].
     String DESCRIPTOR_FILE = "META-INF/meshdi-module";
 
     /// @return id of the module.

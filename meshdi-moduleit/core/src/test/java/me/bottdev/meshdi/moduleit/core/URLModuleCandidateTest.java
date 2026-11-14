@@ -2,6 +2,11 @@ package me.bottdev.meshdi.moduleit.core;
 
 import me.bottdev.kern.dependency.DependOrder;
 import me.bottdev.kern.dependency.DependencyLink;
+import me.bottdev.meshdi.moduleit.api.ModuleDescriptorCodec;
+import me.bottdev.meshdi.moduleit.api.library.LibraryScope;
+import java.util.concurrent.atomic.AtomicBoolean;
+import me.bottdev.kern.dependency.DependOrder;
+import me.bottdev.kern.dependency.DependencyLink;
 import me.bottdev.kern.dependency.versioned.VersionedDependencyRequest;
 import me.bottdev.meshdi.moduleit.api.ModuleDescriptor;
 import me.bottdev.meshdi.moduleit.api.exceptions.ModuleDescriptorException;
@@ -10,15 +15,12 @@ import me.bottdev.meshdi.moduleit.api.library.RepositoryDeclaration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.semver4j.Semver;
-import org.semver4j.range.RangeList;
 
 import java.io.IOException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
@@ -30,16 +32,28 @@ class URLModuleCandidateTest {
     @TempDir
     Path tempDir;
 
-    // A dummy descriptor available in the test classpath
-    public static class DummyDescriptor implements ModuleDescriptor {
-        @Override public String id() { return "dummy"; }
-        @Override public Semver semver() { return Semver.parse("1.0.0"); }
-        @Override public RangeList apiVersion() { return null; }
-        @Override public Set<String> exports() { return Set.of(); }
-        @Override public Set<RepositoryDeclaration> repositories() { return Set.of(); }
-        @Override public Set<LibraryRequirement> libraries() { return Set.of(); }
-        @Override public List<VersionedDependencyRequest<String>> getVersionedDependencies() { return List.of(); }
+    private static final String VALID_DESCRIPTOR = """
+            format=1
+            id=dummy
+            version=1.0.0
+            apiVersion=>=1.0.0
+            exports.0=com.example.api
+            dependencies.0.id=root
+            dependencies.0.version=>=2.0.0
+            dependencies.0.link=OPTIONAL
+            dependencies.0.order=AFTER
+            repositories.0.id=company
+            repositories.0.url=https://repo.example.com/releases
+            libraries.0.coordinate=com.example:lib:1.0.0
+            libraries.0.scope=ISOLATED
+            """;
+
+    /// Loaded only if the candidate executes code named in the descriptor.
+    public static class Tripwire {
+        static { TRIPWIRE_LOADED.set(true); }
     }
+
+    private static final AtomicBoolean TRIPWIRE_LOADED = new AtomicBoolean(false);
 
     private Path createJar(String fileName, String descriptorContent) throws IOException {
         Path jarPath = tempDir.resolve(fileName);
@@ -55,18 +69,69 @@ class URLModuleCandidateTest {
 
     @Test
     void descriptor_ShouldLoadValidDescriptor() throws IOException {
-        Path jar = createJar("valid.jar", DummyDescriptor.class.getName());
+        Path jar = createJar("valid.jar", VALID_DESCRIPTOR);
         URL url = jar.toUri().toURL();
 
         URLModuleCandidate candidate = new URLModuleCandidate(url, jar);
 
         assertThat(candidate.sourceKey()).isEqualTo("valid.jar");
         assertThat(candidate.sourceUrl()).isEqualTo(url);
-        
+
         ModuleDescriptor descriptor = candidate.descriptor();
-        assertThat(descriptor).isNotNull();
         assertThat(descriptor.id()).isEqualTo("dummy");
         assertThat(descriptor.semver().toString()).isEqualTo("1.0.0");
+        assertThat(descriptor.apiVersion().isSatisfiedBy(Semver.parse("1.2.0"))).isTrue();
+        assertThat(descriptor.exports()).containsExactly("com.example.api");
+        assertThat(descriptor.repositories())
+                .containsExactly(new RepositoryDeclaration("company", "https://repo.example.com/releases"));
+        assertThat(descriptor.libraries())
+                .containsExactly(new LibraryRequirement("com.example:lib:1.0.0", LibraryScope.ISOLATED));
+        assertThat(descriptor.getVersionedDependencies()).containsExactly(
+                new VersionedDependencyRequest<>("root", DependencyLink.OPTIONAL, DependOrder.AFTER, ">=2.0.0")
+        );
+    }
+
+    @Test
+    void descriptor_ShouldNeverLoadClassesNamedInDescriptor() throws IOException {
+        // The old format: the file holds a class name that used to be instantiated during discovery.
+        Path jar = createJar("legacy.jar", Tripwire.class.getName());
+        URLModuleCandidate candidate = new URLModuleCandidate(jar.toUri().toURL(), jar);
+
+        assertThatThrownBy(candidate::descriptor)
+                .isInstanceOf(ModuleDescriptorException.class)
+                .hasMessageContaining("no 'format' entry");
+        assertThat(TRIPWIRE_LOADED).isFalse();
+    }
+
+    @Test
+    void descriptor_ShouldThrowOnUnsupportedFormat() throws IOException {
+        Path jar = createJar("future.jar", "format=99\nid=dummy\nversion=1.0.0\n");
+        URLModuleCandidate candidate = new URLModuleCandidate(jar.toUri().toURL(), jar);
+
+        assertThatThrownBy(candidate::descriptor)
+                .isInstanceOf(ModuleDescriptorException.class)
+                .hasMessageContaining("Unsupported module descriptor format");
+    }
+
+    @Test
+    void descriptor_ShouldThrowOnInvalidVersion() throws IOException {
+        Path jar = createJar("badversion.jar", "format=1\nid=dummy\nversion=not-a-version\n");
+        URLModuleCandidate candidate = new URLModuleCandidate(jar.toUri().toURL(), jar);
+
+        assertThatThrownBy(candidate::descriptor)
+                .isInstanceOf(ModuleDescriptorException.class)
+                .hasMessageContaining("invalid version");
+    }
+
+    @Test
+    void descriptor_ShouldThrowWhenTooLarge() throws IOException {
+        String huge = "format=1\nid=dummy\nversion=1.0.0\njunk=" + "x".repeat(ModuleDescriptorCodec.MAX_SIZE_BYTES);
+        Path jar = createJar("huge.jar", huge);
+        URLModuleCandidate candidate = new URLModuleCandidate(jar.toUri().toURL(), jar);
+
+        assertThatThrownBy(candidate::descriptor)
+                .isInstanceOf(ModuleDescriptorException.class)
+                .hasMessageContaining("too large");
     }
 
     @Test
@@ -91,18 +156,6 @@ class URLModuleCandidateTest {
         assertThatThrownBy(candidate::descriptor)
                 .isInstanceOf(ModuleDescriptorException.class)
                 .hasMessageContaining("META-INF/meshdi-module is empty in jar");
-    }
-
-    @Test
-    void descriptor_ShouldThrowWhenClassNotFound() throws IOException {
-        Path jar = createJar("invalid_class.jar", "com.example.NonExistentDescriptor");
-        URL url = jar.toUri().toURL();
-
-        URLModuleCandidate candidate = new URLModuleCandidate(url, jar);
-
-        assertThatThrownBy(candidate::descriptor)
-                .isInstanceOf(ModuleDescriptorException.class)
-                .hasMessageContaining("Module class 'com.example.NonExistentDescriptor' declared in META-INF/meshdi-module not found");
     }
 
     @Test

@@ -1,6 +1,5 @@
 package me.bottdev.meshdi.core.reflection;
 
-import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.BeanResolver;
 import me.bottdev.meshdi.api.exceptions.BeanConstructorException;
 import me.bottdev.meshdi.api.exceptions.BeanCreationException;
