@@ -1,5 +1,7 @@
 package me.bottdev.meshdi.moduleit.core;
 
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -74,4 +76,34 @@ class SimpleModuleExportRegistryTest {
         assertThat(registry.getClassLoaderById("unknown")).isNull();
         assertThat(registry.getIdByPackage("unknown")).isNull();
     }
+    @Test
+    void register_ShouldRejectPackageExportedByAnotherModule() {
+        ClassLoader loader1 = new URLClassLoader(new URL[0]);
+        ClassLoader loader2 = new URLClassLoader(new URL[0]);
+        registry.register("module1", Set.of("pkg.shared"), loader1);
+
+        assertThatThrownBy(() -> registry.register("module2", Set.of("pkg.own", "pkg.shared"), loader2))
+                .isInstanceOf(ModuleExportConflictException.class)
+                .hasMessageContaining("pkg.shared")
+                .hasMessageContaining("module1");
+
+        // Nothing of the rejected module is registered, and the owner is untouched.
+        assertThat(registry.isRegistered("module2")).isFalse();
+        assertThat(registry.getIdByPackage("pkg.own")).isNull();
+        assertThat(registry.getIdByPackage("pkg.shared")).isEqualTo("module1");
+    }
+
+    @Test
+    void unregister_ShouldFreePackagesForAnotherModule() {
+        ClassLoader loader1 = new URLClassLoader(new URL[0]);
+        ClassLoader loader2 = new URLClassLoader(new URL[0]);
+        registry.register("module1", Set.of("pkg.shared"), loader1);
+        registry.unregister("module1");
+
+        registry.register("module2", Set.of("pkg.shared"), loader2);
+
+        assertThat(registry.getIdByPackage("pkg.shared")).isEqualTo("module2");
+        assertThat(registry.getClassLoaderById("module2")).isSameAs(loader2);
+    }
+
 }
