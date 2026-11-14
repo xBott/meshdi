@@ -15,7 +15,7 @@ MeshDI is a Java dependency injection framework. It provides a lightweight API f
 - Constructor and factory bindings
 - Singleton and prototype scopes
 - Lazy and eager initialization strategies
-- `@Inject`, `@Dependency`, `@Component`, and `@PreDestroy` annotations
+- `@Inject`, `@Dependency`, `@Component`, and `@OnLifecycleEvent` annotations
 - Context graph / mesh support
 - Compile-time dependency analysis
 - Dynamic Module loading / unloading
@@ -23,8 +23,8 @@ MeshDI is a Java dependency injection framework. It provides a lightweight API f
 
 ## Requirements
 
-- JDK 23 or newer
-- Gradle Wrapper included in the repository
+- JDK 25 or newer
+- Gradle (the wrapper scripts are in the repository, the wrapper jar is not committed)
 
 ## Build
 
@@ -58,6 +58,31 @@ context.start();
 
 MyService service = context.getResolver().get(serviceKey);
 ```
+
+## Resolution rules
+
+- `get` throws `BeanResolvationException` when nothing is bound to the key. Use `find`, which returns an `Optional`, for beans that may be absent.
+- A dependency marked `@Dependency(link = DependencyLink.OPTIONAL)` is injected as `null` when it is absent.
+- Binding the same key twice in one context fails with `DuplicateBindingException`. Use `override(...)` on the builder to replace a binding on purpose.
+- In a mesh, a key bound by more than one reachable context fails with `MeshAmbiguousLookupException` instead of picking one silently.
+- A singleton is created once even under concurrent access and is published only after its `POST_CONSTRUCT` handlers have completed.
+- `@Inject` marks a constructor and `@Dependency` marks a constructor parameter. Field injection is not supported.
+
+## Modules
+
+- The `@Module` annotation processor writes the module descriptor into the jar as a data file (`ModuleDescriptorCodec` format). Loading a candidate never executes code from the jar before the module is accepted. Modules built with an older processor must be rebuilt.
+- Repositories declared by a module must use `https`. They are used only for that module's isolated libraries; shared libraries are always resolved against the repositories configured by the host.
+- Packages exported by a module are visible only to modules that declare a dependency on it. Two modules cannot export the same package.
+- A module whose start fails is rolled back (its context is removed from the mesh and disposed) and can be started again or unloaded.
+
+## Example
+
+```bash
+./gradlew :meshdi-example:app:copyJar :meshdi-example:root-module:copyJar :meshdi-example:tool-module:copyJar
+cd build/example-run && java -jar app-*-all.jar
+```
+
+Pass `-Pmeshdi.example.dir=/some/path` to assemble the example somewhere else.
 
 ## Project Status
 
