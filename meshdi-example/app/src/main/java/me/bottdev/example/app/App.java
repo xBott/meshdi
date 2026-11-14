@@ -160,7 +160,7 @@ public class App {
                         )
                         .context(context)
                         .persistent(true)
-                        .disposeOnStop(true)
+                        .disposeOnStop(false)
                         .trackClassLoaderOnUnload(false)
                         .build()
         );

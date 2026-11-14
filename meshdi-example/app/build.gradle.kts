@@ -15,8 +15,13 @@ tasks.build {
     dependsOn(tasks.shadowJar)
 }
 
+// Where the runnable example is assembled. Override with -Pmeshdi.example.dir=/some/path
+val exampleRunDir = providers.gradleProperty("meshdi.example.dir")
+    .map { rootProject.layout.projectDirectory.dir(it) }
+    .orElse(rootProject.layout.buildDirectory.dir("example-run"))
+
 tasks.register<Copy>("copyJar") {
     dependsOn(tasks.shadowJar)
     from(tasks.shadowJar)
-    into("/Users/romanplakhotniuk/meshdi_tests")
+    into(exampleRunDir)
 }
