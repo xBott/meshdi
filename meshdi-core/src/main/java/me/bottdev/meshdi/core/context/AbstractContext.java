@@ -8,16 +8,27 @@ import me.bottdev.meshdi.api.exceptions.*;
 import me.bottdev.meshdi.core.reflection.BeanInstantiator;
 import me.bottdev.meshdi.core.reflection.SimpleBeanInstantiator;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class AbstractContext implements Context {
 
-    protected ContextState state = ContextState.CREATED;
+    protected volatile ContextState state = ContextState.CREATED;
     private final AtomicBoolean disposed = new AtomicBoolean(false);
 
-    private final Map<Class<?>, BeanInstantiator<?>> autowireCache = new ConcurrentHashMap<>();
+    /// Cache of reflective instantiators for [#autowire(Class)].
+    ///
+    /// A [ClassValue] stores the entry inside the class itself, so this context never holds a strong
+    /// reference to an autowired class and cannot pin the class loader of an unloaded module.
+    private final ClassValue<BeanInstantiator<?>> autowireCache = new ClassValue<>() {
+        @Override
+        protected BeanInstantiator<?> computeValue(Class<?> implementation) {
+            try {
+                return new SimpleBeanInstantiator<>(implementation);
+            } catch (BeanConstructorException ex) {
+                throw new BeanAutowireException("Cannot autowire class " + implementation.getName(), ex);
+            }
+        }
+    };
 
     protected void requireState(ContextState state) throws IllegalStateException {
         if (this.state != state)
@@ -53,18 +64,7 @@ public abstract class AbstractContext implements Context {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T autowire(Class<? extends T> implementation) {
-        BeanInstantiator<T> instantiator = (BeanInstantiator<T>) autowireCache.computeIfAbsent(
-                implementation,
-                _ -> {
-                    try {
-                        return new SimpleBeanInstantiator<>(implementation);
-
-                    } catch (BeanConstructorException ex) {
-                        throw new BeanAutowireException("Cannot autowire class " + implementation.getName(), ex);
-
-                    }
-                }
-        );
+        BeanInstantiator<T> instantiator = (BeanInstantiator<T>) autowireCache.get(implementation);
 
         try {
             return instantiator.instantiate(resolver());

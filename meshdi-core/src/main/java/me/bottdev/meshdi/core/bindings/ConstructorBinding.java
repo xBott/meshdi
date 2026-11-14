@@ -87,7 +87,7 @@ public class ConstructorBinding<T> implements Binding<T> {
                 );
 
             } catch (Exception ex) {
-                throw new BindingBuildException("Failed to build a constructor binding", ex);
+                throw new BindingBuildException("Failed to build a constructor binding for " + key + ".", ex);
             }
         }
     }
@@ -140,7 +140,7 @@ public class ConstructorBinding<T> implements Binding<T> {
             handler.handle(bean);
 
         } catch (Exception ex) {
-            throw new BeanLifecycleEventHandleException("Failed to invoke destroyer.", ex);
+            throw new BeanLifecycleEventHandleException("Failed to invoke " + type + " handler of " + key + ".", ex);
         }
     }
 }

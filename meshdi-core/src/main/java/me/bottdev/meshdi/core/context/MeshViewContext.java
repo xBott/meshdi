@@ -20,7 +20,13 @@ public class MeshViewContext extends AbstractContext {
 
     @Override
     public ContextState state() {
-        return state;
+        // The delegate can be disposed directly, bypassing this view.
+        return delegate.isDisposed() ? ContextState.DISPOSED : state;
+    }
+
+    @Override
+    public boolean isDisposed() {
+        return super.isDisposed() || delegate.isDisposed();
     }
 
     @Override

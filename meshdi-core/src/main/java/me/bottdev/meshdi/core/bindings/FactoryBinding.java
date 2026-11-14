@@ -93,7 +93,7 @@ public class FactoryBinding<T> implements Binding<T> {
                 );
 
             } catch (Exception ex) {
-                throw new BindingBuildException("Failed to build a factory binding");
+                throw new BindingBuildException("Failed to build a factory binding for " + key + ".", ex);
             }
 
         }
@@ -129,7 +129,7 @@ public class FactoryBinding<T> implements Binding<T> {
         this.initializationStrategy = initializationStrategy;
         this.scopeType = scopeType;
         this.factory = factory;
-        this.dependencies = Collections.unmodifiableList(dependencies);
+        this.dependencies = List.copyOf(dependencies);
         this.eventHandlers = Map.copyOf(eventHandlers);
     }
 
@@ -152,7 +152,7 @@ public class FactoryBinding<T> implements Binding<T> {
             handler.handle(bean);
 
         } catch (Exception ex) {
-            throw new BeanLifecycleEventHandleException("Failed to invoke event hadnler.", ex);
+            throw new BeanLifecycleEventHandleException("Failed to invoke " + type + " handler of " + key + ".", ex);
 
         }
     }
