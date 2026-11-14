@@ -73,8 +73,8 @@ subprojects {
                         uri("https://reposlite.nimbra.net/releases")
 
                     credentials {
-                        username = rootEnvVars["REPO_USERNAME"].toString()
-                        password = rootEnvVars["REPO_PASSWORD"].toString()
+                        username = rootEnvVars["REPO_USERNAME"]?.toString()
+                        password = rootEnvVars["REPO_PASSWORD"]?.toString()
                     }
 
                     authentication {

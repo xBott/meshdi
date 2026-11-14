@@ -3,7 +3,6 @@ junit = "5.10.0"
 mockito = "5.11.0"
 assertj = "4.0.0-M1"
 lombok = "1.18.38"
-guava = "33.5.0-jre"
 kern = "0.0.51-SNAPSHOT"
 auto-service = "1.1.1"
 compile-testing = "0.23.0"
@@ -23,7 +22,6 @@ google-compile-testing = { module = "com.google.testing.compile:compile-testing"
 
 #utils
 lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
-guava = { module = "com.google.guava:guava", version.ref = "guava" }
 semver4j = { module = "org.semver4j:semver4j", version.ref = "semver4j" }
 google-auto-service = { module = "com.google.auto.service:auto-service", version.ref = "auto-service" }
 java-poet = { module = "com.squareup:javapoet", version.ref = "java-poet" }
