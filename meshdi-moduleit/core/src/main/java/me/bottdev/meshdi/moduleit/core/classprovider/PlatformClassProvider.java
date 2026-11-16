@@ -37,10 +37,11 @@ public class PlatformClassProvider implements ClassProvider {
         if (!isPlatformClass(name)) return null;
         try {
             return ClassLoader.getPlatformClassLoader().loadClass(name);
+
         } catch (ClassNotFoundException ex) {
-            // Nobody else may define java.* classes, so the search ends here.
             if (name.startsWith(RESERVED_PREFIX)) throw ex;
             return null;
+
         }
     }
 

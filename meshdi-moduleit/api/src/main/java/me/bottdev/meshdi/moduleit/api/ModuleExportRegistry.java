@@ -1,5 +1,7 @@
 package me.bottdev.meshdi.moduleit.api;
 
+import me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException;
+
 import java.util.Set;
 
 /// Registry which stores package names associated with id of module they belong to.
@@ -10,7 +12,7 @@ public interface ModuleExportRegistry {
 
     /// Registers the packages a module exports. Does nothing if the module is already registered.
     ///
-    /// @throws me.bottdev.meshdi.moduleit.api.exceptions.ModuleExportConflictException if a package is already
+    /// @throws ModuleExportConflictException if a package is already
     /// exported by another module. A package has exactly one exporter, so nobody can shadow it.
     void register(String id, Set<String> packages, ClassLoader classLoader);
 

@@ -56,10 +56,12 @@ public final class URLModuleCandidate implements ModuleCandidate {
 
                 try {
                     return ModuleDescriptorCodec.decode(content);
+
                 } catch (ModuleDescriptorException ex) {
                     throw new ModuleDescriptorException(
                             "Invalid " + DESCRIPTOR_FILE + " in jar " + path + ": " + ex.getMessage(), ex
                     );
+
                 }
             }
 
