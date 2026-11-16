@@ -108,14 +108,19 @@ public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
         if (disposed.compareAndSet(false, true)) {
 
             for (BeanScope scope : scopeRegistry.getAll()) {
+
                 for (BeanInstance<?> instance : scope.getDestroyOrder()) {
                     destroy(instance);
                 }
+
                 try {
                     scope.dispose();
+
                 } catch (RuntimeException ex) {
                     LOGGER.log(System.Logger.Level.ERROR, "Failed to dispose bean scope " + scope + ".", ex);
+
                 }
+
             }
             scopeRegistry.clear();
 
@@ -128,24 +133,32 @@ public class SimpleBeanLifecycleManager implements BeanLifecycleManager {
         T value = instance.value();
         try {
             instance.binding().invokeEventHandler(BeanLifecycleEventType.PRE_DESTROY, value);
+
         } catch (Exception ex) {
             reportDestroyFailure(instance, ex);
+
         }
+
         if (value instanceof Disposable disposable) {
             try {
                 disposable.dispose();
+
             } catch (Exception ex) {
                 reportDestroyFailure(instance, ex);
+
             }
         }
+
     }
 
     private void reportDestroyFailure(BeanInstance<?> instance, Exception failure) {
         try {
             destroyFailureSink.accept(new BeanDestroyFailed(instance.binding().getKey(), failure));
+
         } catch (RuntimeException sinkFailure) {
             failure.addSuppressed(sinkFailure);
             LOGGER.log(System.Logger.Level.ERROR, "Failed to report a bean destroy failure.", failure);
+
         }
     }
 

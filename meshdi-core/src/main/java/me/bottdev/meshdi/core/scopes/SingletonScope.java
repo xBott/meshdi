@@ -84,7 +84,6 @@ public class SingletonScope implements BeanScope {
                 if (failIfExists) throw new BeanCreationException("Singleton " + key + " is already created");
                 return existing.value();
             }
-            // The lock is reentrant, so a bean that requests itself while being created ends up here again.
             if (holder.creating)
                 throw new BeanCreationException("Singleton " + key + " depends on itself while being created.");
 
@@ -99,11 +98,15 @@ public class SingletonScope implements BeanScope {
                 holder.instance = instance;
                 creationOrder.push(instance);
                 return value;
+
             } finally {
                 holder.creating = false;
+
             }
+
         } finally {
             holder.lock.unlock();
+
         }
     }
 
