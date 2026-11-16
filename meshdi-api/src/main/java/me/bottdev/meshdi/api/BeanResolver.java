@@ -1,6 +1,7 @@
 package me.bottdev.meshdi.api;
 
 import me.bottdev.kern.commons.key.TypedKey;
+import me.bottdev.meshdi.api.exceptions.BeanResolvationException;
 
 import java.util.Optional;
 
@@ -19,7 +20,7 @@ public interface BeanResolver {
     /// @param key the typed key identifying the bean
     /// @param <T> the type of the bean
     /// @return the resolved bean instance, never `null`
-    /// @throws me.bottdev.meshdi.api.exceptions.BeanResolvationException if no binding exists for the key
+    /// @throws BeanResolvationException if no binding exists for the key
     /// or the bean cannot be created. Use [#find(TypedKey)] for beans that may be absent.
     <T> T get(TypedKey<T> key);
 
