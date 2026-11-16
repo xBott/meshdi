@@ -114,11 +114,13 @@ public class SimpleContextBuilder implements ContextBuilder {
 
     @Override
     public ContextBuilder merge(@NonNull ContextBuilder other) {
-        // Check everything first, so a duplicate does not leave this builder half-merged.
+
         Map<TypedKey<?>, BindingBuilder<?>> otherBindings = other.bindings();
         for (TypedKey<?> key : otherBindings.keySet()) {
             if (bindingBuilders.containsKey(key)) throw new DuplicateBindingException(key);
+
         }
+
         bindingBuilders.putAll(otherBindings);
         return this;
     }

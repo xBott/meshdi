@@ -5,6 +5,7 @@ import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.bindings.ConstructorBindingBuilder;
 import me.bottdev.meshdi.api.bindings.FactoryBindingBuilder;
 import me.bottdev.meshdi.api.exceptions.ContextBuildException;
+import me.bottdev.meshdi.api.exceptions.DuplicateBindingException;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -31,7 +32,7 @@ public interface ContextBuilder {
     /// @param bindingBuilder the binding builder to register
     /// @param <T> the type of the bean
     /// @return this builder instance
-    /// @throws me.bottdev.meshdi.api.exceptions.DuplicateBindingException if a binding with the same key
+    /// @throws DuplicateBindingException if a binding with the same key
     /// is already registered. Use [#override(BindingBuilder)] to replace it on purpose.
     <T> ContextBuilder binding(@NonNull BindingBuilder<T> bindingBuilder);
 
