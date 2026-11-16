@@ -118,12 +118,13 @@ public class DagContextMesh implements ContextMesh {
             if (registered.containsKey(contextId))
                 throw new MeshRegisterException("Context \"" + contextId + "\" already exists in a mesh.");
 
-            // A new node has no incoming edges, so its outgoing edges can only close a cycle through itself.
             for (String targetId : sees) {
                 if (targetId.equals(contextId))
                     throw new MeshRegisterException("Edge " + contextId + " -> " + targetId + " would create a cycle.");
+
                 if (!registered.containsKey(targetId))
                     throw new MeshRegisterException("Context \"" + targetId + "\" does not exist in a mesh.");
+
             }
 
             try {
@@ -140,7 +141,6 @@ public class DagContextMesh implements ContextMesh {
                 return viewContext;
 
             } catch (Exception ex) {
-                // Never leave a half-registered context behind.
                 registered.remove(contextId);
                 try {
                     graphView.removeNode(contextId);
@@ -154,6 +154,7 @@ public class DagContextMesh implements ContextMesh {
 
         } finally {
             writeLock.unlock();
+
         }
     }
 
@@ -173,6 +174,7 @@ public class DagContextMesh implements ContextMesh {
             if (registered.remove(contextId) == null) return;
             graphView.removeNode(contextId);
             publishSnapshot();
+
         } finally {
             writeLock.unlock();
         }
@@ -250,7 +252,6 @@ public class DagContextMesh implements ContextMesh {
             throw new MeshAmbiguousLookupException(fromId, key, owners.ids());
 
         Context context = current.registered().get(owners.ids().getFirst()).context();
-        // The owner may have been disposed after this snapshot was taken.
         Binding<T> binding = context.bindingManager().getBinding(key);
         if (binding == null) return Optional.empty();
 
@@ -260,6 +261,7 @@ public class DagContextMesh implements ContextMesh {
     @Override
     public void dispose() throws DisposeException {
         if (disposed.compareAndSet(false, true)) {
+
             writeLock.lock();
             try {
                 registered.reversed().forEach((_, registration) ->
@@ -268,9 +270,12 @@ public class DagContextMesh implements ContextMesh {
                 registered.clear();
                 graphView.clear();
                 snapshot = Snapshot.EMPTY;
+
             } finally {
                 writeLock.unlock();
+
             }
+
         }
     }
 

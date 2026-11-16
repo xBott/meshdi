@@ -4,6 +4,7 @@ import me.bottdev.kern.commons.Disposable;
 import me.bottdev.kern.commons.key.TypedKey;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshRegisterException;
 import me.bottdev.meshdi.api.exceptions.mesh.MeshContextSelectionException;
+import me.bottdev.meshdi.api.exceptions.mesh.MeshAmbiguousLookupException;
 
 import java.util.List;
 import java.util.Optional;
@@ -86,8 +87,7 @@ public interface ContextMesh extends Disposable {
     /// @param key the typed key to look for
     /// @param <T> the type of the bean
     /// @return an [Optional] containing the lookup result if successful, empty otherwise
-    /// @throws me.bottdev.meshdi.api.exceptions.mesh.MeshAmbiguousLookupException if more than one
-    /// visible context binds the key
+    /// @throws MeshAmbiguousLookupException if more than one visible context binds the key
     <T> Optional<ContextMeshLookup<T>> lookup(String fromId, TypedKey<T> key);
 
 }
